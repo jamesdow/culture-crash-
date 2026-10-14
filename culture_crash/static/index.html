@@ -38,6 +38,10 @@ input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);b
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .check{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px}
 .check input{width:auto}
+.plats{display:grid;grid-template-columns:1fr 1fr;column-gap:8px}
+.plats .check{margin-top:4px}
+.plat{display:inline-block;font:11px Inter;padding:0 6px;border-radius:4px;background:var(--line);color:var(--ink);margin-right:4px}
+.routes{font-size:12px;color:var(--muted);margin:-4px 0 12px}
 button{font:500 14px Inter;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 12px;cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button:disabled{opacity:.5;cursor:default}
@@ -132,8 +136,14 @@ th{color:var(--muted);font-weight:500}
       <div><label>Effort</label><select name="effort"><option>medium</option><option selected>high</option><option>xhigh</option><option>max</option></select></div>
       <div><label>Seed (optional)</label><input name="seed" type="number" placeholder="random"></div>
     </div>
-    <label class="check"><input type="checkbox" name="use_web" checked> Live web search</label>
-    <label class="check"><input type="checkbox" name="use_reddit" checked> Reddit directly</label>
+    <label>Where to listen</label>
+    <div class="plats">
+      <label class="check"><input type="checkbox" name="p_web" checked> Open web</label>
+      <label class="check"><input type="checkbox" name="p_reddit" checked> Reddit</label>
+      <label class="check"><input type="checkbox" name="p_tiktok" checked> TikTok</label>
+      <label class="check"><input type="checkbox" name="p_instagram" checked> Instagram</label>
+      <label class="check"><input type="checkbox" name="p_youtube" checked> YouTube</label>
+    </div>
     <label>Subreddits (comma-separated, optional)</label>
     <input name="subreddits" placeholder="default: broad everyday-life set">
     <div class="btns">
@@ -158,6 +168,8 @@ th{color:var(--muted);font-weight:500}
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const PLAT = {web:"Web",reddit:"Reddit",tiktok:"TikTok",instagram:"Instagram",youtube:"YouTube",demo:"Demo"};
+const plat = p => `<span class="plat">${esc(PLAT[p] || p)}</span>`;
 const safeUrl = u => /^https?:\/\//i.test(u || "") ? u : "";
 let current = null, timer = null;
 
@@ -195,7 +207,7 @@ $("#f").onsubmit = async e => {
   for(const k of ["recency_days","shortlist"]) cfg[k] = parseInt(fd.get(k));
   cfg.band = parseFloat(fd.get("band")); cfg.effort = fd.get("effort");
   if(fd.get("seed")) cfg.seed = parseInt(fd.get("seed"));
-  cfg.use_web = !!fd.get("use_web"); cfg.use_reddit = !!fd.get("use_reddit");
+  cfg.platforms = ["web","reddit","tiktok","instagram","youtube"].filter(p => fd.get("p_"+p));
   cfg.subreddits = (fd.get("subreddits")||"").split(",").map(s=>s.trim().replace(/^r\//,"")).filter(Boolean);
   const {id} = await api("/api/runs", {method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(cfg)});
   openRun(id);
@@ -252,7 +264,7 @@ function card(c, run, sp){
         <dt>Bridge</dt><dd>${esc(c.bridge)}</dd>
         <dt>Value exchange</dt><dd>${esc(c.value_exchange)}</dd>
         <dt>Risk</dt><dd>${esc(c.risk_note)}</dd>
-        <dt>Citations</dt><dd>Far concept: ${lc?link(lc.source):"-"}<br>Tension: ${ev.map(s=>`<span class="k">${esc(s.id)}</span> ${link(s.source)}`).join("<br>")}</dd>
+        <dt>Citations</dt><dd>Far concept: ${lc?link(lc.source):"-"}<br>Tension: ${ev.map(s=>`${plat(s.source.platform)} ${link(s.source)}`).join("<br>")}</dd>
       </dl>
     </div></div>`;
 }
@@ -288,7 +300,7 @@ function space(run, sp){
     <p>${esc(sc.distance_rationale)}</p><p class="skeleton">${esc(sp.why_unnamed)}</p>
     ${sc.existing_names.length?`<ul class="ev">${sc.existing_names.map(n=>`<li><b>${esc(n.term)}</b>: ${esc(n.closeness)} ${link(n.source)}</li>`).join("")}</ul>`:""}
     <h3>Evidence</h3>
-    <ul class="ev">${ev.map(s=>`<li><span class="k">${esc(s.id)} · ${esc(s.kind)} · w${s.emotional_weight}</span> ${esc(s.observation)} ${s.verbatim?`<span class="q">“${esc(s.verbatim)}”</span>`:""} ${link(s.source)}</li>`).join("")}</ul>
+    <ul class="ev">${ev.map(s=>`<li>${plat(s.source.platform)}<span class="k">${esc(s.id)} · ${esc(s.kind)} · w${s.emotional_weight}</span> ${esc(s.observation)} ${s.verbatim?`<span class="q">“${esc(s.verbatim)}”</span>`:""} ${link(s.source)}</li>`).join("")}</ul>
     ${cb?`<h3>Conscience brief (for you to weigh, not a verdict)</h3><dl class="cons">
       <dt>Gives</dt><dd>${esc(cb.gives)}</dd><dt>Takes</dt><dd>${esc(cb.takes)}</dd>
       <dt>Who is vulnerable</dt><dd>${esc(cb.who_is_vulnerable)}</dd>
@@ -316,6 +328,7 @@ function render(run){
       <a href="/api/runs/${esc(run.id)}/export.md?brief=true" target="_blank"><button title="Only spaces you judged as giving are included">Export cleared brief</button></a>
     </div>
     <div class="scores" style="margin-bottom:10px">${Object.entries(run.stats).map(([k,v])=>`<div><b>${v}</b>${esc(k.replace(/_/g," "))}</div>`).join("")}</div>
+    ${Object.keys(run.routes||{}).length?`<div class="routes">Reached via: ${Object.entries(run.routes).map(([k,v])=>`<b>${esc(k)}</b> ${esc(v)}`).join(" · ")}</div>`:""}
     ${run.progress.length?`<details ${run.status==="running"?"open":""}><summary>Progress · ${esc(run.status)} · ${esc(run.stage)}</summary><div class="log">${run.progress.map(p=>`<div>${esc(p.at.slice(11))} <b>[${esc(p.stage)}]</b> ${esc(p.message)}</div>`).join("")}</div></details>`:""}
     ${map(run)}
     ${short.length&&pending?`<p class="kicker">${pending} of ${short.length} shortlisted space(s) still need your verdict.</p>`:""}

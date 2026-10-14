@@ -23,11 +23,11 @@ from .models import (
     Source,
     Space,
 )
-from .reddit import DEFAULT_SUBREDDITS, RedditClient, RedditPost, RedditUnavailable
+from .harvest import DEFAULT_SUBREDDITS, DOMAINS, PLATFORMS, HarvestSpec, Post, Unavailable, routes_for, run_chain
 from .schemas import ClusterResult, CollisionSet, ConscienceOut, LatentDive, LatentVerification, ScoreResult, SignalExtraction
 from .store import RunStore
 
-MAX_WORKERS = 5
+MAX_WORKERS = 6
 
 
 # ----------------------------------------------------------------- helpers
@@ -79,16 +79,18 @@ def signals_block(signals: list[Signal]) -> str:
 
 
 class Engine:
-    def __init__(self, llm: LLM, store: RunStore, reddit_factory: Callable[[], RedditClient] = RedditClient):
+    def __init__(self, llm: LLM, store: RunStore, routes: Callable[[str], list] = routes_for):
         self.llm = llm
         self.store = store
-        self.reddit_factory = reddit_factory
+        self.routes = routes
 
     def run(self, run: Run) -> Run:
         run.status = "running"
         cfg = run.config
         self.rng = random.Random(cfg.seed if cfg.seed is not None else random.randrange(1 << 30))
         try:
+            if hasattr(self.llm, "preflight"):
+                self.llm.preflight()
             self._scan(run)
             self._cluster(run)
             self._score(run)
@@ -105,15 +107,16 @@ class Engine:
 
     def _scan(self, run: Run) -> None:
         cfg = run.config
-        self.store.log(run, "scan", "Scanning for raw signals: slang, workarounds, micro-communities, shame, friction.")
+        self.store.log(run, "scan", f"Scanning {', '.join(cfg.platforms)} for slang, workarounds, micro-communities, shame and friction.")
         jobs: dict[str, Callable[[], tuple[list[Signal], list[Source], int]]] = {}
-        if cfg.use_web:
+        if "web" in cfg.platforms:
             for kind in SIGNAL_KINDS:
                 jobs[f"web:{kind}"] = lambda k=kind: self._scan_web(run, k)
-        if cfg.use_reddit:
-            jobs["reddit"] = lambda: self._scan_reddit(run)
+        for platform in cfg.platforms:
+            if platform != "web":
+                jobs[platform] = lambda p=platform: self._scan_platform(run, p)
         if not jobs:
-            raise EngineError("Both web and Reddit scanning are switched off, so there is nothing to scan.")
+            raise EngineError("Every platform is switched off, so there is nothing to scan.")
 
         found: list[Signal] = []
         all_sources: dict[str, Source] = {}
@@ -144,62 +147,62 @@ class Engine:
         run.signals = unique
         run.sources = list(all_sources.values())
         run.stats.update(sources=len(run.sources), signals=len(unique), ungrounded_dropped=dropped)
+        for platform in PLATFORMS:
+            n = sum(1 for s in unique if s.source.platform == platform)
+            if n:
+                run.stats[f"signals_{platform}"] = n
         if not unique:
             raise EngineError("No grounded signals were found. Check network access, or widen the focus.")
         self.store.log(run, "scan", f"{len(unique)} signals kept; {dropped} dropped because they couldn't be tied to a retrieved source.")
 
-    def _extract(self, kind_hint: str, research: Research) -> tuple[list[Signal], int]:
-        listing, refs = source_list(research.sources)
-        out = self.llm.structured(P.EXTRACT_SYSTEM, P.extract_prompt(kind_hint, research.text, listing), SignalExtraction, effort="medium")
+    def _ground(self, extraction: SignalExtraction, refs: dict[str, Source]) -> tuple[list[Signal], int]:
         signals, dropped = [], 0
-        for e in out.signals:
-            src = resolve(e.source_ref, refs)
-            if src is None:
-                dropped += 1
-                continue
-            signals.append(
-                Signal(
-                    id="",
-                    kind=e.kind,
-                    observation=e.observation,
-                    verbatim=e.verbatim,
-                    emotional_weight=int(scoring.clamp(e.emotional_weight, 1, 5)),
-                    source=src,
-                )
-            )
-        return signals, dropped
-
-    def _scan_web(self, run: Run, kind: str) -> tuple[list[Signal], list[Source], int]:
-        research = self.llm.research(P.SCAN_SYSTEM, P.scan_prompt(kind, run.config), max_searches=6)
-        sigs, dropped = self._extract(kind, research)
-        return sigs, research.sources, dropped
-
-    def _scan_reddit(self, run: Run) -> tuple[list[Signal], list[Source], int]:
-        cfg = run.config
-        try:
-            posts = self.reddit_factory().harvest(cfg.subreddits or DEFAULT_SUBREDDITS, cfg.recency_days, cfg.focus)
-        except RedditUnavailable as e:
-            self.store.log(run, "scan", f"Reddit unreachable ({e}); falling back to web search restricted to reddit.com.")
-            research = self.llm.research(P.SCAN_SYSTEM, _reddit_fallback_prompt(cfg), max_searches=8)
-            sigs, dropped = self._extract("mixed (decide per finding)", research)
-            return sigs, research.sources, dropped
-        posts = posts[:60]
-        sources = [_post_source(p) for p in posts]
-        listing, refs = source_list(sources)
-        block = "\n\n".join(
-            f"S{i}. r/{p.subreddit} (score {p.score})\nTITLE: {p.title}\nBODY: {p.body or '(no body)'}"
-            for i, p in enumerate(posts, 1)
-        )
-        out = self.llm.structured(P.EXTRACT_SYSTEM, P.reddit_prompt(block, cfg), SignalExtraction, effort="medium")
-        signals, dropped = [], 0
-        for e in out.signals:
+        for e in extraction.signals:
             src = resolve(e.source_ref, refs)
             if src is None:
                 dropped += 1
                 continue
             signals.append(Signal(id="", kind=e.kind, observation=e.observation, verbatim=e.verbatim,
                                   emotional_weight=int(scoring.clamp(e.emotional_weight, 1, 5)), source=src))
-        return signals, sources, dropped
+        return signals, dropped
+
+    def _extract(self, kind_hint: str, research: Research) -> tuple[list[Signal], int]:
+        listing, refs = source_list(research.sources)
+        out = self.llm.structured(P.EXTRACT_SYSTEM, P.extract_prompt(kind_hint, research.text, listing), SignalExtraction, effort="medium")
+        return self._ground(out, refs)
+
+    def _scan_web(self, run: Run, kind: str) -> tuple[list[Signal], list[Source], int]:
+        research = self.llm.research(P.SCAN_SYSTEM, P.scan_prompt(kind, run.config), max_searches=6)
+        sigs, dropped = self._extract(kind, research)
+        return sigs, research.sources, dropped
+
+    def _scan_platform(self, run: Run, platform: str) -> tuple[list[Signal], list[Source], int]:
+        """Direct routes first; if every one fails, Claude web search restricted to the platform's domain."""
+        cfg = run.config
+        spec = HarvestSpec(focus=cfg.focus, recency_days=cfg.recency_days, subreddits=cfg.subreddits or DEFAULT_SUBREDDITS)
+        try:
+            res = run_chain(self.routes(platform), spec)
+        except Unavailable as e:
+            self.store.set_route(run, platform, "web search on " + ", ".join(DOMAINS[platform]))
+            self.store.log(run, "scan", f"{platform}: no direct route ({e}). Using web search restricted to {', '.join(DOMAINS[platform])}.")
+            research = self.llm.research(P.SCAN_SYSTEM, P.platform_search_prompt(platform, cfg), max_searches=8,
+                                         allowed_domains=DOMAINS[platform])
+            for src in research.sources:
+                src.origin = "web-search"
+            sigs, dropped = self._extract("mixed (decide per finding)", research)
+            return sigs, research.sources, dropped
+
+        self.store.set_route(run, platform, res.route)
+        self.store.log(run, "scan", f"{platform}: {len(res.posts)} posts via {res.route}.")
+        sources = [_post_source(p, res.route) for p in res.posts]
+        _, refs = source_list(sources)
+        block = "\n\n".join(
+            f"S{i}. [{p.context}] (engagement {p.engagement})" + (f"\nTITLE: {p.title}" if p.title else "") + f"\nTEXT: {p.text or '(none)'}"
+            for i, p in enumerate(res.posts, 1)
+        )
+        out = self.llm.structured(P.EXTRACT_SYSTEM, P.posts_prompt(platform, block, cfg), SignalExtraction, effort="medium")
+        sigs, dropped = self._ground(out, refs)
+        return sigs, sources, dropped
 
     # ---- 2. cluster -----------------------------------------------------
 
@@ -384,14 +387,8 @@ class Engine:
         self.store.save(run)
 
 
-def _post_source(p: RedditPost) -> Source:
+def _post_source(p: Post, route: str) -> Source:
     date = datetime.fromtimestamp(p.created_utc, tz=timezone.utc).date().isoformat() if p.created_utc else None
-    return Source(url=p.url, title=f"r/{p.subreddit}: {p.title}", date=date, origin="reddit")
-
-
-def _reddit_fallback_prompt(cfg) -> str:
-    focus = f" related to {cfg.focus}" if cfg.focus else ""
-    return f"""Search reddit.com only (put site:reddit.com in your queries) for recent posts{focus} that use tells like:
-"is there a word for", "is it weird that", "does anyone else", "don't judge me", "my janky system", "I stopped ... and I don't know why".
-Market: {cfg.market}. Prefer the last {cfg.recency_days} days.
-Write 8-12 findings: what is happening, the exact words used, the subreddit, with citations."""
+    title = p.title or p.text
+    title = (title[:90] + "...") if len(title) > 90 else title
+    return Source(url=p.url, title=f"{p.context}: {title}" if p.context else title, date=date, origin=route)

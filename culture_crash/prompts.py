@@ -68,20 +68,60 @@ happening, the exact words people use (quoted), where it was (with a citation), 
 when. End with one line naming which findings felt most charged."""
 
 
-def reddit_prompt(posts_block: str, cfg: RunConfig) -> str:
-    focus = f" Pay special attention to anything touching: {cfg.focus}." if cfg.focus else ""
-    return f"""Below are recent Reddit posts gathered for pre-trend signals. Each has a source number.{focus}
+PLATFORM_BRIEFS = {
+    "reddit": """REDDIT. Long-form, anonymous, unguarded. The richest place for confession and for people \
+asking whether they are normal.
+Native tells: "is it weird that", "does anyone else", "is there a word for", "TIFU", "AITA for", \
+confession and off-my-chest posts, LifeProTips that are really coping strategies, tiny subreddits \
+with fierce devotion, and the comment that says "I thought I was the only one".""",
+    "tiktok": """TIKTOK. Coinage happens here first. Look at captions, on-screen text, hashtags, sound \
+names and comment sections.
+Native tells: format-as-coinage ("girl dinner"-style noun phrases, "-core", "-maxxing", "POV:", \
+"tell me you're X without telling me", "the way I..."), "not me doing X at 2am", comment pile-ons \
+of "I thought I was the only one", stitches and duets confessing the same small habit, and \
+creators being sheepish about a routine. Skip anything already covered by trend explainers.""",
+    "instagram": """INSTAGRAM. More curated, so the tells are subtler: carousels of "things nobody tells \
+you about...", meme accounts whose jokes land too hard, captions that over-explain, close-friends \
+confessions that leak into public posts, and comment sections where people tag friends with "this is us".
+Native tells: "unpopular opinion", "soft launch", relatable-meme pages, "a thread", "normalise...", \
+"no one talks about".""",
+    "youtube": """YOUTUBE. The gold is in the comments under vlogs, video essays and how-to videos, where \
+people recognise themselves in someone else's story.
+Native tells: "I didn't know there was a word for this", "I feel so seen", "finally someone said \
+it", "why does nobody talk about this", long personal confessions under a video, how-to videos for \
+things adults are embarrassed not to know, and "day in my life" videos that show workarounds.""",
+}
 
-Extract every post that is real evidence of one of these signal kinds:
-- slang: a coined or repurposed word or phrase for a feeling or behaviour, or someone asking "is there a word for..."
+
+def posts_prompt(platform: str, posts_block: str, cfg: RunConfig) -> str:
+    focus = f" Pay special attention to anything touching: {cfg.focus}." if cfg.focus else ""
+    return f"""Below are recent {platform} posts and comments gathered for pre-trend signals. Each has a source number.{focus}
+
+{PLATFORM_BRIEFS.get(platform, "")}
+
+Extract every item that is real evidence of one of these signal kinds:
+- slang: a coined or repurposed word, phrase or format for a feeling or behaviour, or someone asking "is there a word for..."
 - workaround: a homemade system or product-misuse for an emotional or social job
 - micro_community: disproportionate devotion to something small
 - shame: mild everyday embarrassment about a behaviour
 - friction: quiet frustration, an abandoned habit, something that has started to feel like a chore
 
-Skip memes, news reposts, and anything already called by an established trend name.
+Skip memes with no feeling underneath, news reposts, ads and sponsored posts, and anything already called by an established trend name.
 
 {posts_block}"""
+
+
+def platform_search_prompt(platform: str, cfg: RunConfig) -> str:
+    focus = f"Focus territory: {cfg.focus}." if cfg.focus else "No focus territory: range across everyday life."
+    return f"""{PLATFORM_BRIEFS[platform]}
+
+Search only this platform (results are restricted to its domain). Hunt for all five tells: \
+coinage, workarounds, micro-communities, low-grade shame and rising friction. Use the phrasing \
+real users of this platform use.
+{focus} Market: {cfg.market}. Prefer the last {cfg.recency_days} days.
+
+Write field notes: 8-12 distinct findings. For each, give what is happening, the exact words \
+used (quoted, from the caption, title or comment), where (with a citation), and roughly when."""
 
 
 EXTRACT_SYSTEM = """You turn field notes into clean evidence records.
@@ -119,8 +159,9 @@ Rules:
 marketing words and avoid clinical words.
 - pull_a / pull_b: the two forces in tension, stated concretely.
 - signal_ids: the evidence that holds the space up. Prefer spaces held up by several signal \
-kinds (a coinage and a shame and a workaround together is the strongest pattern). A space \
-with one signal is weak, so say so in why_unnamed.
+kinds (a coinage and a shame and a workaround together is the strongest pattern), and by \
+signals from several platforms (the same feeling surfacing on TikTok, Reddit and YouTube \
+independently). A space with one signal is weak, so say so in why_unnamed.
 - working_name: a provisional, descriptive label for internal use, not a slogan.
 - nearest_named: real, existing trend names or concepts this could be confused with. These \
 will be checked against the web, so be honest about overlaps.

@@ -8,7 +8,7 @@ from culture_crash import scoring
 from culture_crash.llm import Research
 from culture_crash.models import Run, RunConfig, Source
 from culture_crash.pipeline import Engine
-from culture_crash.reddit import RedditUnavailable
+from culture_crash.harvest import Post, Unavailable
 from culture_crash.report import render
 from culture_crash.schemas import (
     ClusterResult, ClusterSpace, CollisionCard, CollisionSet, ConscienceOut, ExistingName, ExtractedSignal,
@@ -21,9 +21,14 @@ from culture_crash.store import RunStore
 class FakeLLM:
     def __init__(self):
         self.calls: list[str] = []
+        self.domains: list[list[str] | None] = []
 
-    def research(self, system, prompt, max_searches=6):
+    def research(self, system, prompt, max_searches=6, allowed_domains=None):
         self.calls.append("research")
+        self.domains.append(allowed_domains)
+        if allowed_domains == ["tiktok.com"]:
+            return Research(text="notes", sources=[Source(url="https://www.tiktok.com/@a/video/1", title="T1"),
+                                                   Source(url="https://www.tiktok.com/@b/video/2", title="T2")])
         return Research(text="notes", sources=[Source(url="https://forum.example/a", title="A"),
                                                Source(url="https://reddit.com/r/x/b", title="B")])
 
@@ -75,16 +80,39 @@ class FakeLLM:
         raise AssertionError(schema)
 
 
-class NoReddit:
-    def harvest(self, *a, **k):
-        raise RedditUnavailable("blocked")
+class Route:
+    def __init__(self, name, posts=None, fail=False):
+        self.name, self.posts, self.fail = name, posts or [], fail
+
+    def ready(self):
+        return True
+
+    def harvest(self, spec):
+        if self.fail:
+            raise Unavailable("HTTP 403")
+        return self.posts
+
+
+def reddit_posts(n):
+    return [Post(platform="reddit", url=f"https://www.reddit.com/r/AskUK/comments/{i}", title=f"Is it weird that I do thing number {i}",
+                 text="long enough body text here", context="r/AskUK", engagement=i) for i in range(n)]
+
+
+def fake_routes(platform):
+    return {
+        "reddit": [Route("reddit-json", fail=True), Route("reddit-rss", reddit_posts(10))],
+        "tiktok": [Route("apify-tiktok", fail=True)],
+        "instagram": [],
+        "youtube": [Route("yt-dlp", [Post(platform="youtube", url="https://www.youtube.com/watch?v=x&lc=1",
+                                          text="I didn't know there was a word for this", context="comment on: v")] * 3)],
+    }[platform]
 
 
 def test_full_pipeline(tmp_path):
     store = RunStore(tmp_path)
     llm = FakeLLM()
     run = Run(id="20260101-000000-abcd", config=RunConfig(seed=1, shortlist=2, cards_per_space=1))
-    Engine(llm, store, reddit_factory=NoReddit).run(run)
+    Engine(llm, store, routes=fake_routes).run(run)
 
     assert run.status == "done", run.error
     # Ungrounded signals (S99) are dropped and duplicates collapsed.
@@ -107,8 +135,15 @@ def test_full_pipeline(tmp_path):
     assert hot.collisions[0].signal_ids == ["sig-01"]
     # The engine never sets a verdict.
     assert all(s.verdict.status == "pending" for s in run.spaces)
-    # Reddit fallback went through web search instead.
-    assert any("falling back" in p.message for p in run.progress)
+    # Each platform records how it was reached; blocked ones fall back to domain-restricted search.
+    assert run.routes["reddit"] == "reddit-rss"
+    assert run.routes["youtube"] == "yt-dlp"  # fewer posts than wanted, but the best available
+    assert run.routes["tiktok"] == "web search on tiktok.com"
+    assert run.routes["instagram"] == "web search on instagram.com"
+    assert ["tiktok.com"] in llm.domains and ["instagram.com"] in llm.domains
+    platforms = {s.source.platform for s in run.signals}
+    assert {"reddit", "tiktok", "youtube"} <= platforms
+    assert run.stats["signals_tiktok"] >= 1
 
     md = render(run)
     assert "Graze the same hill." in md and "PENDING" in md

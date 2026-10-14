@@ -39,7 +39,7 @@ class Research:
 
 
 class LLM(Protocol):
-    def research(self, system: str, prompt: str, max_searches: int = 6) -> Research: ...
+    def research(self, system: str, prompt: str, max_searches: int = 6, allowed_domains: list[str] | None = None) -> Research: ...
 
     def structured(self, system: str, prompt: str, schema: type[T], effort: str | None = None) -> T: ...
 
@@ -50,6 +50,19 @@ class ClaudeLLM:
         self.effort = effort
         self.client = client or anthropic.Anthropic(max_retries=4)
 
+    def preflight(self) -> None:
+        """Fail fast, before any scraping, if credentials or the model are wrong."""
+        try:
+            self.client.models.retrieve(self.model)
+        except anthropic.NotFoundError as e:
+            raise EngineError(f"Model {self.model!r} isn't available to this account.") from e
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
+            raise EngineError("Anthropic credentials were rejected. Check ANTHROPIC_API_KEY.") from e
+        except anthropic.APIConnectionError as e:
+            raise EngineError("Couldn't reach the Anthropic API. Check your network.") from e
+        except TypeError as e:  # the SDK found no credentials at all
+            raise EngineError("No Anthropic credentials found. Set ANTHROPIC_API_KEY (or run `ant auth login`).") from e
+
     def _stream(self, **kwargs):
         with self.client.beta.messages.stream(
             model=self.model,
@@ -59,10 +72,13 @@ class ClaudeLLM:
         ) as stream:
             return stream.get_final_message()
 
-    def research(self, system: str, prompt: str, max_searches: int = 6) -> Research:
+    def research(self, system: str, prompt: str, max_searches: int = 6, allowed_domains: list[str] | None = None) -> Research:
         user = {"role": "user", "content": prompt}
         messages: list[dict] = [user]
-        tools = [{"type": WEB_SEARCH_TOOL, "name": "web_search", "max_uses": max_searches}]
+        tool: dict = {"type": WEB_SEARCH_TOOL, "name": "web_search", "max_uses": max_searches}
+        if allowed_domains:
+            tool["allowed_domains"] = allowed_domains
+        tools = [tool]
         texts: list[str] = []
         sources: dict[str, Source] = {}
         excerpts: list[tuple[str, str]] = []

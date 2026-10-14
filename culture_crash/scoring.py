@@ -24,8 +24,11 @@ def need_features(signals: list[Signal]) -> tuple[float, dict[str, float]]:
         "shame_present": 1.0 if any(s.kind == "shame" for s in signals) else 0.0,
         "emotional_weight": mean(s.emotional_weight for s in signals) / 5,
         "source_spread": min(len(domains) / 4, 1.0),
+        # the same tension surfacing on TikTok, Reddit and YouTube independently is strong evidence
+        "platform_spread": min(len({s.source.platform for s in signals}) / 3, 1.0),
     }
-    weights = {"volume": 0.25, "kind_diversity": 0.2, "shame_present": 0.15, "emotional_weight": 0.25, "source_spread": 0.15}
+    weights = {"volume": 0.2, "kind_diversity": 0.2, "shame_present": 0.15, "emotional_weight": 0.2,
+               "source_spread": 0.1, "platform_spread": 0.15}
     score = 10 * sum(parts[k] * weights[k] for k in parts)
     return round(score, 2), {k: round(v, 2) for k, v in parts.items()}
 

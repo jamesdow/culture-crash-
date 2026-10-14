@@ -6,6 +6,7 @@ import threading
 import time
 from pathlib import Path
 
+from .harvest import PLATFORMS
 from .models import Run, RunConfig
 from .store import RunStore
 
@@ -13,7 +14,7 @@ from .store import RunStore
 def _config(a: argparse.Namespace) -> RunConfig:
     return RunConfig(
         focus=a.focus, brand=a.brand, market=a.market, recency_days=a.days,
-        use_web=not a.no_web, use_reddit=not a.no_reddit,
+        platforms=[x for x in PLATFORMS if x in {p.strip().lower() for p in a.platforms.split(",")} and x not in {p.strip().lower() for p in (a.skip or "").split(",")}],
         subreddits=[s.strip().removeprefix("r/") for s in a.subreddits.split(",") if s.strip()] if a.subreddits else [],
         max_spaces=a.max_spaces, shortlist=a.shortlist, band=a.band,
         seeds_per_space=a.seeds, cards_per_space=a.cards, seed=a.seed, model=a.model, effort=a.effort,
@@ -120,8 +121,8 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--brand", help="optional brand lens; shapes only the value exchange")
     r.add_argument("--market", default="UK and US")
     r.add_argument("--days", type=int, default=90, help="recency window in days")
-    r.add_argument("--no-web", action="store_true")
-    r.add_argument("--no-reddit", action="store_true")
+    r.add_argument("--platforms", default=",".join(PLATFORMS), help="comma-separated: web,reddit,tiktok,instagram,youtube (default: all)")
+    r.add_argument("--skip", help="comma-separated platforms to leave out, e.g. instagram")
     r.add_argument("--subreddits", help="comma-separated list; defaults to a broad everyday-life set")
     r.add_argument("--max-spaces", type=int, default=8)
     r.add_argument("--shortlist", type=int, default=4)

@@ -29,21 +29,21 @@ def _wiki(name: str, slug: str) -> Source:
 
 
 SIGNALS = [
-    _sig(1, "slang", "People describe owing friends a catch-up as a debt that compounds the longer it goes unpaid.", "my catch-up debt is now at payday-loan levels", 4, "forum thread"),
-    _sig(2, "workaround", "Recurring phone reminders set to message specific close friends every few weeks.", "I have a reminder that just says 'text Sam, you love Sam'", 4, "Q&A comment"),
-    _sig(3, "shame", "Embarrassment at admitting a best friendship is maintained by calendar reminders.", "it feels so fake that I need an alarm to remember my best friend exists", 5, "confession post"),
-    _sig(4, "friction", "Dread at the phrase 'we must catch up properly', because it signals a plan that will never happen.", "'we should catch up properly' is where friendships go to die", 4, "social reply"),
+    _sig(1, "slang", "People describe owing friends a catch-up as a debt that compounds the longer it goes unpaid.", "my catch-up debt is now at payday-loan levels", 4, "Reddit post"),
+    _sig(2, "workaround", "Recurring phone reminders set to message specific close friends every few weeks.", "I have a reminder that just says 'text Sam, you love Sam'", 4, "YouTube comment"),
+    _sig(3, "shame", "Embarrassment at admitting a best friendship is maintained by calendar reminders.", "it feels so fake that I need an alarm to remember my best friend exists", 5, "TikTok comment"),
+    _sig(4, "friction", "Dread at the phrase 'we must catch up properly', because it signals a plan that will never happen.", "'we should catch up properly' is where friendships go to die", 4, "Instagram comment"),
     _sig(5, "micro_community", "Small groups of friends who keep the same standing night at the same pub for years and protect it fiercely.", "nobody RSVPs. Thursday is just Thursday", 3, "local news feature"),
-    _sig(6, "slang", "People say they are tired before an event even starts: the plan has already drained them.", "I'm pre-tired for Saturday and it's Tuesday", 4, "forum thread"),
-    _sig(7, "workaround", "Booking only refundable or cancellable options so that backing out stays possible.", "I only say yes to things I can bail on", 3, "review comment"),
-    _sig(8, "shame", "Feeling guilty about being relieved when someone else cancels.", "the joy when they cancel first is my most shameful emotion", 5, "confession post"),
-    _sig(9, "friction", "Dreading a calendar with nothing unpleasant in it, just because every slot is full.", "every single thing is nice and I still want to lie under a table", 4, "Q&A thread"),
-    _sig(10, "shame", "Adults secretly learning basics they think they should already know (boiling an egg, reading a payslip, swimming).", "I'm 36 and I watched a video on how to boil an egg with the sound off so my partner wouldn't hear", 5, "confession post"),
-    _sig(11, "workaround", "Practising adult skills in private before doing them in front of anyone else.", "I practise phone calls to the GP in the car first", 4, "forum thread"),
-    _sig(12, "micro_community", "Tiny online groups where adults swap 'embarrassing basics' they've just learned, with fierce mutual kindness.", "this is the only place I can ask how a mortgage actually works", 4, "community post"),
-    _sig(13, "friction", "Rejecting polished tutorials because they assume a baseline the learner doesn't have.", "every tutorial starts at step 3", 3, "review comment"),
-    _sig(14, "slang", "Spending whole days in bed on purpose as self-care.", "full bed-rot sunday", 3, "social post"),
-    _sig(15, "micro_community", "People collecting and swapping used hotel key cards.", "my key card binder is up to 140", 2, "hobby forum"),
+    _sig(6, "slang", "People say they are tired before an event even starts: the plan has already drained them.", "I'm pre-tired for Saturday and it's Tuesday", 4, "Reddit post"),
+    _sig(7, "workaround", "Booking only refundable or cancellable options so that backing out stays possible.", "I only say yes to things I can bail on", 3, "Reddit comment"),
+    _sig(8, "shame", "Feeling guilty about being relieved when someone else cancels.", "the joy when they cancel first is my most shameful emotion", 5, "TikTok comment"),
+    _sig(9, "friction", "Dreading a calendar with nothing unpleasant in it, just because every slot is full.", "every single thing is nice and I still want to lie under a table", 4, "TikTok caption"),
+    _sig(10, "shame", "Adults secretly learning basics they think they should already know (boiling an egg, reading a payslip, swimming).", "I'm 36 and I watched a video on how to boil an egg with the sound off so my partner wouldn't hear", 5, "TikTok comment"),
+    _sig(11, "workaround", "Practising adult skills in private before doing them in front of anyone else.", "I practise phone calls to the GP in the car first", 4, "Reddit post"),
+    _sig(12, "micro_community", "Tiny online groups where adults swap 'embarrassing basics' they've just learned, with fierce mutual kindness.", "this is the only place I can ask how a mortgage actually works", 4, "Reddit community"),
+    _sig(13, "friction", "Rejecting polished tutorials because they assume a baseline the learner doesn't have.", "every tutorial starts at step 3", 3, "Reddit comment"),
+    _sig(14, "slang", "Spending whole days in bed on purpose as self-care.", "full bed-rot sunday", 3, "TikTok caption"),
+    _sig(15, "micro_community", "People collecting and swapping used hotel key cards.", "my key card binder is up to 140", 2, "Instagram post"),
 ]
 
 
@@ -214,7 +214,7 @@ def build_demo_run(run_id: str) -> Run:
     for s in (friends, pre, basics):
         s.shortlisted = True
     run = Run(id=run_id, status="done", stage="done", demo=True,
-              config=RunConfig(focus="everyday life", brand=None, seed=7, use_reddit=False),
+              config=RunConfig(focus="everyday life", brand=None, seed=7),
               signals=SIGNALS, spaces=[friends, basics, pre, rot, keys])
     run.spaces.sort(key=lambda s: s.scores.product, reverse=True)
     run.stats = {"sources": 0, "signals": len(SIGNALS), "ungrounded_dropped": 0, "spaces": 5, "shortlisted": 3,

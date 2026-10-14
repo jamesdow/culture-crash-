@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 SignalKind = Literal["slang", "workaround", "micro_community", "shame", "friction"]
 SIGNAL_KINDS: tuple[SignalKind, ...] = ("slang", "workaround", "micro_community", "shame", "friction")
@@ -28,7 +28,17 @@ class Source(BaseModel):
     url: str
     title: str = ""
     date: Optional[str] = None
-    origin: Literal["web", "reddit", "demo"] = "web"
+    origin: str = "web"  # the route that retrieved it: web-search, reddit-rss, yt-dlp, apify-tiktok, demo...
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def platform(self) -> str:
+        from .harvest import platform_of
+
+        if self.origin == "demo":  # illustrative signals carry their platform in the title
+            t = self.title.lower()
+            return next((p for p in ("reddit", "tiktok", "instagram", "youtube") if p in t), "web")
+        return platform_of(self.url)
 
 
 class Signal(BaseModel):
@@ -130,8 +140,7 @@ class RunConfig(BaseModel):
     brand: Optional[str] = None
     market: str = "UK and US"
     recency_days: int = 90
-    use_web: bool = True
-    use_reddit: bool = True
+    platforms: list[Literal["web", "reddit", "tiktok", "instagram", "youtube"]] = ["web", "reddit", "tiktok", "instagram", "youtube"]
     subreddits: list[str] = []
     max_spaces: int = 8
     shortlist: int = 4
@@ -161,6 +170,7 @@ class Run(BaseModel):
     signals: list[Signal] = []
     spaces: list[Space] = []
     stats: dict[str, int] = {}
+    routes: dict[str, str] = {}  # platform -> how it was reached this run
     error: Optional[str] = None
 
     def signal(self, sid: str) -> Optional[Signal]:

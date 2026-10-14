@@ -54,11 +54,12 @@ def test_research_collects_sources_and_resumes_pause_turn():
     cite = {"type": "web_search_result_location", "url": "https://forum.example/2", "title": "Forum", "cited_text": "my janky system", "encrypted_index": "x"}
     second = sse(message([{"type": "text", "text": "Finding one.", "citations": [cite]}], "end_turn"))
     seen: list[dict] = []
-    r = make_llm([first, second], seen).research("sys", "find things", max_searches=3)
+    r = make_llm([first, second], seen).research("sys", "find things", max_searches=3, allowed_domains=["reddit.com"])
 
     req = seen[0]
     assert req["model"] == "claude-opus-5-5" and req["fallbacks"] == "default"
     assert req["tools"][0]["type"] == "web_search_20260209" and req["tools"][0]["max_uses"] == 3
+    assert req["tools"][0]["allowed_domains"] == ["reddit.com"]
     assert len(seen) == 2 and seen[1]["messages"][-1]["role"] == "assistant"  # resumed after pause_turn
     assert [s.url for s in r.sources] == ["https://www.reddit.com/r/x/1", "https://forum.example/2"]
     assert r.cited_excerpts == [("https://forum.example/2", "my janky system")]

@@ -49,7 +49,7 @@ def render_space(run: Run, sp: Space) -> str:
         s = run.signal(sid)
         if s:
             q = f' - "{s.verbatim}"' if s.verbatim else ""
-            out.append(f"- `{s.id}` **{s.kind}** (weight {s.emotional_weight}): {s.observation}{q} - {_link(s.source)}")
+            out.append(f"- `{s.id}` **{s.kind}** · {s.source.platform} (weight {s.emotional_weight}): {s.observation}{q} - {_link(s.source)}")
 
     if sp.collisions:
         out += ["", "### Collisions"]
@@ -90,6 +90,7 @@ def render(run: Run, brief_only: bool = False) -> str:
         head += ["> **DEMO DATA.** Illustrative only. Tension signals are invented examples, not live research. Far concepts link to real reference pages.", ""]
     head += [f"- Focus: {cfg.focus or 'open'} | Brand lens: {cfg.brand or 'none'} | Market: {cfg.market} | Window: {cfg.recency_days} days",
              f"- Stats: " + ", ".join(f"{k} {v}" for k, v in run.stats.items()),
+             *( [f"- Reached via: " + "; ".join(f"{k}: {v}" for k, v in run.routes.items())] if run.routes else [] ),
              "", "_Every shortlisted space passes a human gate with one question: does naming this give people something, or take something from them?_", ""]
 
     shortlisted = [s for s in run.spaces if s.shortlisted]

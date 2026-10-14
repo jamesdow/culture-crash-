@@ -11,7 +11,7 @@
                                                verification     coinage      questions          can answer)
 ```
 
-1. **Scan.** It runs five parallel web-search hunts, one per tell: emerging **slang**, **workarounds**, **over-intense micro-communities**, **low-grade shame** and **rising friction**. A sixth job harvests Reddit directly, using top posts from everyday-life subreddits and searches for phrases such as *"is there a word for"*, *"is it weird that"* and *"don't judge me"*.
+1. **Scan.** It runs five parallel open-web hunts, one per tell: emerging **slang**, **workarounds**, **over-intense micro-communities**, **low-grade shame** and **rising friction**. In parallel it listens on **Reddit, TikTok, Instagram and YouTube**, each with a prompt written for that platform's own tells (see *Where it listens* below).
 2. **Cluster** the signals into candidate spaces. A space is a felt contradiction (pull A × pull B), not a topic.
 3. **Score** each space. A fresh web search checks whether the space already has a name.
    - **Cultural distance** (0–10): how far the space sits from the named vocabulary. If a legible, named trend already exists, distance is capped at 3.
@@ -33,6 +33,24 @@
    Cards are ranked by **mad factor = surprise × coherence**, so a wild card that doesn't land ranks low.
 6. **Conscience brief.** For each space the engine lays out what naming it *gives*, what it *takes*, who is vulnerable, the exploitation vectors and the honest version of the idea. **The engine never writes a verdict.** A verdict is recorded only by a person, through the UI or `culture-crash verdict`. The "cleared brief" export contains only the spaces a person judged as *gives*.
 
+### Where it listens: no keys required
+
+Every platform tries its direct routes in order. If all of them fail, it falls back to **Claude's web search restricted to that platform's domain**. That search runs on Anthropic's side, so it works from anywhere with no keys. The run records which route each platform used (shown as "Reached via" in the UI and the report).
+
+| Platform | Routes, in order | Optional upgrade |
+|---|---|---|
+| **Reddit** | public JSON → old.reddit JSON → RSS feeds → [Arctic Shift](https://arctic-shift.photon-reddit.com) archive → PullPush archive → web search on reddit.com | `REDDIT_CLIENT_ID`/`SECRET` (not needed) |
+| **YouTube** | Data API (if keyed) → **yt-dlp** (no key; reads top comments under recent videos) → web search on youtube.com | `YOUTUBE_API_KEY`, free from Google Cloud in about 5 minutes, more reliable than yt-dlp |
+| **TikTok** | Apify scraper (captions + comments, if keyed) → web search on tiktok.com | `APIFY_TOKEN`, pay-per-result, a few cents per run |
+| **Instagram** | Apify hashtag scraper (if keyed) → web search on instagram.com | `APIFY_TOKEN` |
+| **Open web** | Claude web search across forums, reviews, comment sections, newsletters | none |
+
+**Reddit without a key.** The public JSON and RSS routes usually work from a home connection and are often blocked from cloud servers. The archives are research mirrors and may lag by a day or two. In the worst case, domain-restricted web search still pulls real, citable Reddit threads.
+
+**TikTok and Instagram without a key** run on domain-restricted web search. This finds captions, titles and indexed comment text, which is good for coinage and formats but thinner on comment-section confession. Adding `APIFY_TOKEN` is the biggest single upgrade for those two. Check each platform's terms for your use.
+
+Cross-platform evidence counts: the evidence score includes **platform spread**, so the same feeling surfacing independently on TikTok, Reddit and YouTube scores higher than one platform shouting.
+
 ### Citation integrity
 
 Structured steps never write URLs. They point at numbered sources (`S1`, `S2`…) that the search tool or Reddit actually returned. Code resolves those numbers and **drops anything that points elsewhere**: the run reports `ungrounded_dropped`. This rule covers tension signals, existing trend names and far concepts alike.
@@ -42,9 +60,10 @@ Structured steps never write URLs. They point at numbered sources (`S1`, `S2`…
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-export ANTHROPIC_API_KEY=sk-ant-...        # or `ant auth login`
-# optional, makes Reddit far more reliable (app-only OAuth):
-export REDDIT_CLIENT_ID=... REDDIT_CLIENT_SECRET=...
+export ANTHROPIC_API_KEY=sk-ant-...        # or `ant auth login`. The only thing you need.
+# all optional (see "Where it listens"):
+export YOUTUBE_API_KEY=...                 # free; more reliable YouTube comments than yt-dlp
+export APIFY_TOKEN=...                     # richer TikTok + Instagram (captions and comments)
 ```
 
 ## Use
@@ -56,6 +75,8 @@ culture-crash demo                          # illustrative offline run, no key n
 culture-crash run                           # open scan of everyday life
 culture-crash run --focus "food at work" --brand "a supermarket" --days 60 --market UK
 culture-crash run --seed 42 --seeds 6 --cards 4 --effort xhigh
+culture-crash run --platforms tiktok,youtube,reddit       # listen only where you choose
+culture-crash run --skip instagram
 
 culture-crash list
 culture-crash verdict <run_id> space-1 gives --note "gives permission, no shame hook" --by James
@@ -66,7 +87,7 @@ Runs are saved as JSON (with a markdown report) in `./runs/`.
 
 **Brand lens.** `--brand` shapes only the value exchange and the conscience brief. The scan, the scoring and the oblique strategies stay brand-blind, so the brand can't bend what gets found.
 
-**Model and cost.** The default model is `claude-opus-5-5` at `high` effort, with server-side refusal fallback switched on. A full run makes roughly 30–45 API calls, about a third of them with web search. Expect a few dollars per run, more at `xhigh`/`max` or with a larger shortlist. This is an estimate, so measure your first runs.
+**Model and cost.** The default model is `claude-opus-5-5` at `high` effort, with server-side refusal fallback switched on. A full run with all five sources makes roughly 35–50 API calls, about a third of them with web search. Expect a few dollars per run, more at `xhigh`/`max` or with a larger shortlist. This is an estimate, so measure your first runs.
 
 ## Where to tune it
 
@@ -75,11 +96,12 @@ Runs are saved as JSON (with a markdown report) in `./runs/`.
 | `culture_crash/prompts.py` | every instruction: the five tells, scoring rubrics, the dive method, card rules, the conscience brief |
 | `culture_crash/seeds.py` | the far-domain pool (add stranger, more specific domains to push distance) |
 | `culture_crash/scoring.py` | evidence-feature weights, model/evidence blend, quadrants, mad factor |
-| `culture_crash/reddit.py` | default subreddits and "tell" queries |
+| `culture_crash/harvest/` | per-platform routes, default subreddits, search phrases and hashtags |
+| `PLATFORM_BRIEFS` in `prompts.py` | what each platform's native tells look like |
 
 ## Honest limits
 
-- **Reddit access.** Unauthenticated Reddit JSON is often rate-limited or blocked. When it is, the engine says so and falls back to web search restricted to reddit.com. Use OAuth credentials for direct access, and follow Reddit's API terms.
+- **Direct routes are untested live.** The Reddit, YouTube and Apify routes are tested against mocked responses. They couldn't be reached from the sandbox they were built in. Any route that breaks fails over to the next one and is logged on the run, so a broken route degrades the scan but doesn't stop it.
 - **Self-scores.** Distance, need, surprise and coherence are partly the model's own ratings. The evidence feature score and the web legibility check are the counterweights. Read the rationales, not just the numbers.
 - **Synthesis is not a source.** A citation proves a signal exists, not that a space is real. That judgment, like the conscience verdict, belongs to the operator.
 - **Not yet run live.** The pipeline is tested end to end with a scripted model, and the Claude calls are tested against replayed API streams. It has not yet been run against the live API.

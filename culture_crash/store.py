@@ -50,6 +50,10 @@ class RunStore:
             run.progress.append(ProgressEvent(at=now_iso(), stage=stage, message=message))
             self.save(run)
 
+    def set_route(self, run: Run, platform: str, route: str) -> None:
+        with self._lock:  # scan jobs run in threads; never mutate the run mid-save
+            run.routes[platform] = route
+
     def set_verdict(self, run_id: str, space_id: str, status: VerdictStatus, note: str = "", by: str = "") -> Run:
         """The only way a verdict is ever written: by a person, through here."""
         with self._lock:
