@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Culture Crash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f1ea;--panel:#fffdf8;--ink:#1b1a17;--muted:#6b665c;--line:#ddd6c8;
+  --accent:#d1401f;--accent-soft:#f6ddd3;--band:#f3e3c2;--good:#2f7a4a;--bad:#a8321d;--warn:#a87414;
+  --card:#141311;--card-ink:#f4f1ea;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#131210;--panel:#1c1a17;--ink:#ece7dc;--muted:#9a9384;--line:#34302a;
+  --accent:#ff6a3d;--accent-soft:#3a2219;--band:#3a2f1c;--good:#5dbb7f;--bad:#ff7a5c;--warn:#e0a63c;
+  --card:#f4f1ea;--card-ink:#141311;}}
+:root[data-theme="dark"]{
+  --bg:#131210;--panel:#1c1a17;--ink:#ece7dc;--muted:#9a9384;--line:#34302a;
+  --accent:#ff6a3d;--accent-soft:#3a2219;--band:#3a2f1c;--good:#5dbb7f;--bad:#ff7a5c;--warn:#e0a63c;
+  --card:#f4f1ea;--card-ink:#141311;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Inter,system-ui,sans-serif}
+a{color:inherit;text-decoration-color:var(--accent);text-underline-offset:2px}
+header{display:flex;align-items:baseline;gap:16px;padding:20px 24px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font:600 26px/1 Fraunces,serif;margin:0;letter-spacing:-.01em}
+header h1 span{color:var(--accent)}
+header p{margin:0;color:var(--muted)}
+.layout{display:grid;grid-template-columns:320px 1fr;min-height:calc(100vh - 70px)}
+aside{border-right:1px solid var(--line);padding:20px;overflow:auto}
+main{padding:24px 32px 80px;overflow:auto;min-width:0}
+@media (max-width:860px){.layout{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line)}main{padding:16px}}
+h2{font:600 20px/1.2 Fraunces,serif;margin:0 0 12px}
+h3{font:600 12px/1 Inter;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.check{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px}
+.check input{width:auto}
+button{font:500 14px Inter;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 12px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.btns{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.runs{list-style:none;padding:0;margin:0}
+.runs li{padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent}
+.runs li:hover{border-color:var(--line)}
+.runs li.on{background:var(--accent-soft)}
+.runs small{display:block;color:var(--muted)}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted);margin-left:4px}
+.pill.demo{border-color:var(--warn);color:var(--warn)}
+.empty{color:var(--muted);max-width:560px}
+.banner{border:1px dashed var(--warn);color:var(--warn);padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px}
+.err{border-color:var(--bad);color:var(--bad)}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.toolbar .grow{flex:1}
+.log{font:12px/1.6 "JetBrains Mono",monospace;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:180px;overflow:auto;color:var(--muted)}
+.log b{color:var(--ink);font-weight:400}
+.mapwrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin:16px 0}
+.mapwrap svg{width:100%;height:auto;display:block}
+.space{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;margin:20px 0}
+.space .need{font:400 24px/1.3 Fraunces,serif;margin:6px 0 14px;max-width:820px}
+.kicker{font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.pulls{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin:12px 0}
+.pulls div{border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.pulls .x{color:var(--accent);font:600 18px Fraunces}
+@media (max-width:600px){.pulls{grid-template-columns:1fr}.pulls .x{text-align:center}}
+.skeleton{font-style:italic;color:var(--muted)}
+.scores{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.scores b{font:600 22px Fraunces;color:var(--ink);display:block}
+.gate{border:2px solid var(--accent);border-radius:10px;padding:14px 16px;margin:16px 0;background:var(--accent-soft)}
+.gate .q{font:600 16px/1.35 Fraunces,serif;margin-bottom:10px}
+.gate .opts{display:flex;gap:8px;flex-wrap:wrap}
+.gate .opts button.sel-gives{background:var(--good);border-color:var(--good);color:#fff}
+.gate .opts button.sel-takes{background:var(--bad);border-color:var(--bad);color:#fff}
+.gate .opts button.sel-unsure{background:var(--warn);border-color:var(--warn);color:#fff}
+.gate .row{margin-top:8px}
+.verdict{font-size:13px;margin-top:8px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.oblique{background:var(--card);color:var(--card-ink);padding:22px 20px;min-height:150px;display:flex;flex-direction:column;justify-content:space-between}
+.oblique p{font:400 21px/1.3 Fraunces,serif;margin:0}
+.oblique small{opacity:.6;font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-top:14px}
+.card .body{padding:14px 16px;font-size:14px}
+.card .body p{margin:0 0 10px}
+.card dl{margin:0;font-size:13px}
+.card dt{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-top:8px}
+.card dd{margin:2px 0 0}
+.coin{display:inline-block;background:var(--accent-soft);color:var(--ink);padding:1px 8px;border-radius:99px;margin:2px 4px 2px 0;font-weight:500}
+.mf{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:8px}
+.bar{height:4px;background:var(--line);border-radius:4px;flex:1;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+ul.ev{padding-left:18px;margin:0}
+ul.ev li{margin:6px 0;font-size:14px}
+.k{font:11px "JetBrains Mono",monospace;color:var(--muted)}
+.q{font-style:italic}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--muted);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500}
+.cons dt{font-weight:600;margin-top:8px}
+.cons dd{margin:2px 0 0}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;padding:20px;z-index:9}
+.overlay.on{display:flex}
+.overlay .oblique{max-width:520px;width:100%;min-height:300px;border-radius:14px;cursor:pointer}
+.overlay .oblique p{font-size:32px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Culture <span>Crash</span></h1>
+  <p>Unnamed, but load-bearing. Pre-trends collided with far concepts.</p>
+</header>
+<div class="layout">
+<aside>
+  <h2>New run</h2>
+  <form id="f">
+    <label>Focus territory (optional)</label>
+    <input name="focus" placeholder="e.g. friendship after 30, food at work">
+    <label>Brand lens (optional; shapes only the value exchange)</label>
+    <input name="brand" placeholder="e.g. a supermarket, a bank">
+    <div class="row">
+      <div><label>Market</label><input name="market" value="UK and US"></div>
+      <div><label>Window (days)</label><input name="recency_days" type="number" value="90" min="7"></div>
+    </div>
+    <div class="row">
+      <div><label>Shortlist</label><input name="shortlist" type="number" value="4" min="1" max="8"></div>
+      <div><label>Band (0-10)</label><input name="band" type="number" value="5.5" step="0.5" min="0" max="10"></div>
+    </div>
+    <div class="row">
+      <div><label>Effort</label><select name="effort"><option>medium</option><option selected>high</option><option>xhigh</option><option>max</option></select></div>
+      <div><label>Seed (optional)</label><input name="seed" type="number" placeholder="random"></div>
+    </div>
+    <label class="check"><input type="checkbox" name="use_web" checked> Live web search</label>
+    <label class="check"><input type="checkbox" name="use_reddit" checked> Reddit directly</label>
+    <label>Subreddits (comma-separated, optional)</label>
+    <input name="subreddits" placeholder="default: broad everyday-life set">
+    <div class="btns">
+      <button class="primary" type="submit">Run engine</button>
+      <button type="button" id="demoBtn">Load demo</button>
+    </div>
+  </form>
+  <h3>Runs</h3>
+  <ul class="runs" id="runs"></ul>
+</aside>
+<main id="main">
+  <div class="empty">
+    <h2>Find the pre-trend.</h2>
+    <p>The engine scans everyday life for five tells: new slang, workarounds, over-intense micro-communities, low-grade shame and rising friction. It clusters them into spaces of unnamed need and scores each on <b>cultural distance &times; need intensity</b>. It then dives into far, randomly seeded domains for a real concept with the same shape, and collides the two into Oblique Strategy-style cards. Every claim links back to a source.</p>
+    <p>Nothing leaves the engine until a person answers one question: <i>does naming this give people something, or take something from them?</i></p>
+    <p>Start a run, or load the demo to look around.</p>
+  </div>
+</main>
+</div>
+<div class="overlay" id="ov"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = u => /^https?:\/\//i.test(u || "") ? u : "";
+let current = null, timer = null;
+
+function link(src){
+  if(!src) return "";
+  const u = safeUrl(src.url), t = esc(src.title || src.url);
+  return u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${t}</a>` : `<i>${t}</i>`;
+}
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  if(!r.ok) throw new Error((await r.text()) || r.statusText);
+  return r.headers.get("content-type")?.includes("json") ? r.json() : r.text();
+}
+
+async function loadRuns(){
+  const runs = await api("/api/runs");
+  $("#runs").innerHTML = runs.map(r => `<li data-id="${esc(r.id)}" class="${current===r.id?"on":""}">
+    ${esc(r.focus || "open scan")}${r.demo?'<span class="pill demo">demo</span>':""}<span class="pill">${esc(r.status)}</span>
+    <small>${esc(r.id)}${r.brand?" · "+esc(r.brand):""} · ${r.shortlisted} shortlisted</small></li>`).join("") || '<li class="empty">No runs yet.</li>';
+  document.querySelectorAll("#runs li[data-id]").forEach(li => li.onclick = () => openRun(li.dataset.id));
+}
+
+async function openRun(id){
+  current = id; clearTimeout(timer);
+  const run = await api(`/api/runs/${id}`);
+  render(run); loadRuns();
+  if(run.status === "running" || run.status === "queued") timer = setTimeout(() => current===id && openRun(id), 2500);
+}
+
+$("#f").onsubmit = async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target), cfg = {};
+  for(const k of ["focus","brand","market"]) if(fd.get(k)) cfg[k] = fd.get(k);
+  for(const k of ["recency_days","shortlist"]) cfg[k] = parseInt(fd.get(k));
+  cfg.band = parseFloat(fd.get("band")); cfg.effort = fd.get("effort");
+  if(fd.get("seed")) cfg.seed = parseInt(fd.get("seed"));
+  cfg.use_web = !!fd.get("use_web"); cfg.use_reddit = !!fd.get("use_reddit");
+  cfg.subreddits = (fd.get("subreddits")||"").split(",").map(s=>s.trim().replace(/^r\//,"")).filter(Boolean);
+  const {id} = await api("/api/runs", {method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(cfg)});
+  openRun(id);
+};
+$("#demoBtn").onclick = async () => { const {id} = await api("/api/demo", {method:"POST"}); openRun(id); };
+
+function map(run){
+  const pts = run.spaces.filter(s => s.scores);
+  if(!pts.length) return "";
+  const W=640,H=360,P=44, band=run.config.band;
+  const x = v => P + v/10*(W-P*1.5), y = v => H-P - v/10*(H-P*1.6);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Spaces plotted by cultural distance and need intensity">
+    <rect x="${x(band)}" y="${y(10)}" width="${x(10)-x(band)}" height="${y(band)-y(10)}" fill="var(--band)"/>
+    <text x="${x(10)-6}" y="${y(10)+16}" text-anchor="end" font-size="11" fill="var(--muted)">TARGET: unnamed but load-bearing</text>
+    <text x="${x(0)+6}" y="${y(10)+16}" font-size="11" fill="var(--muted)">already mined</text>
+    <text x="${x(10)-6}" y="${y(0)-8}" text-anchor="end" font-size="11" fill="var(--muted)">curiosity</text>
+    <text x="${x(0)+6}" y="${y(0)-8}" font-size="11" fill="var(--muted)">noise</text>
+    <line x1="${x(0)}" y1="${y(0)}" x2="${x(10)}" y2="${y(0)}" stroke="var(--line)"/>
+    <line x1="${x(0)}" y1="${y(0)}" x2="${x(0)}" y2="${y(10)}" stroke="var(--line)"/>
+    <text x="${(x(0)+x(10))/2}" y="${H-10}" text-anchor="middle" font-size="12" fill="var(--muted)">cultural distance →</text>
+    <text transform="translate(14 ${(y(0)+y(10))/2}) rotate(-90)" text-anchor="middle" font-size="12" fill="var(--muted)">need intensity →</text>`;
+  for(const v of [20,40,60,80]){ // iso-product curves: distance x need = v
+    let d=""; for(let dx=v/10; dx<=10; dx+=0.1){ const ny=v/dx; if(ny<=10) d += (d?"L":"M")+x(dx).toFixed(1)+" "+y(ny).toFixed(1); }
+    s += `<path d="${d}" fill="none" stroke="var(--line)" stroke-dasharray="3 4"/><text x="${x(10)+3}" y="${y(v/10)+4}" font-size="10" fill="var(--muted)">${v}</text>`;
+  }
+  const placed = []; // label boxes already drawn, to nudge overlapping labels apart
+  for(const sp of pts){
+    const c = sp.shortlisted ? "var(--accent)" : "var(--muted)";
+    const cx = x(sp.scores.cultural_distance), cy = y(sp.scores.need_intensity), w = sp.working_name.length*6.6;
+    let lx = cx+10, ly = cy+4;
+    if(lx + w > W) lx = cx - 10 - w;
+    for(const dy of [0,16,-16,32,-32,48,-48]){
+      const hit = placed.some(p => lx < p.x+p.w && p.x < lx+w && Math.abs((cy+4+dy) - p.y) < 14);
+      if(!hit){ ly = cy+4+dy; break; }
+    }
+    placed.push({x:lx, y:ly, w});
+    s += `<g style="cursor:pointer" onclick="document.getElementById('${esc(sp.id)}')?.scrollIntoView({behavior:'smooth'})">
+      <circle cx="${cx}" cy="${cy}" r="${sp.shortlisted?7:5}" fill="${c}"/>
+      <text x="${lx}" y="${ly}" font-size="12" fill="var(--ink)">${esc(sp.working_name)}</text></g>`;
+  }
+  return `<div class="mapwrap">${s}</svg></div>`;
+}
+
+function card(c, run, sp){
+  const lc = sp.latent.find(l => l.name === c.latent_name);
+  const ev = c.signal_ids.map(id => run.signals.find(s => s.id===id)).filter(Boolean);
+  return `<div class="card">
+    <div class="oblique"><p>${esc(c.oblique_strategy)}</p><small>${esc(c.latent_name)}${lc?" · "+esc(lc.domain):""}</small></div>
+    <div class="body">
+      <div class="mf">mad factor <div class="bar"><i style="width:${c.mad_factor*10}%"></i></div> ${c.mad_factor.toFixed(1)}</div>
+      <p>${esc(c.mad_thought)}</p>
+      <dl>
+        <dt>Language for it</dt><dd>${c.coinage.map(w=>`<span class="coin">${esc(w)}</span>`).join("")}<br>${esc(c.coinage_gloss)}</dd>
+        <dt>Bridge</dt><dd>${esc(c.bridge)}</dd>
+        <dt>Value exchange</dt><dd>${esc(c.value_exchange)}</dd>
+        <dt>Risk</dt><dd>${esc(c.risk_note)}</dd>
+        <dt>Citations</dt><dd>Far concept: ${lc?link(lc.source):"-"}<br>Tension: ${ev.map(s=>`<span class="k">${esc(s.id)}</span> ${link(s.source)}`).join("<br>")}</dd>
+      </dl>
+    </div></div>`;
+}
+
+function gate(run, sp){
+  const v = sp.verdict;
+  const btn = (st, label) => `<button data-st="${st}" class="${v.status===st?"sel-"+st:""}">${label}</button>`;
+  return `<div class="gate" data-space="${esc(sp.id)}">
+    <div class="q">Does naming this give people something, or take something from them?</div>
+    <div class="opts">${btn("gives","It gives")}${btn("takes","It takes")}${btn("unsure","Unsure")}</div>
+    <div class="row"><input placeholder="Your reasoning" class="note" value="${esc(v.note)}"><input placeholder="Your name" class="by" value="${esc(v.by)}"></div>
+    <div class="verdict">${v.status==="pending" ? "Pending. The engine can't decide this, and won't." : `Recorded: <b>${esc(v.status)}</b>${v.by?" by "+esc(v.by):""}${v.at?" · "+esc(v.at):""}`}</div>
+  </div>`;
+}
+
+function space(run, sp){
+  const sc = sp.scores, cb = sp.conscience;
+  const ev = sp.signal_ids.map(id => run.signals.find(s => s.id===id)).filter(Boolean);
+  return `<section class="space" id="${esc(sp.id)}">
+    <div class="kicker">${esc(sp.working_name)}</div>
+    <div class="need">“${esc(sp.unnamed_need)}”</div>
+    ${gate(run, sp)}
+    <div class="scores">
+      <div><b>${sc.cultural_distance.toFixed(1)}</b>cultural distance</div>
+      <div><b>${sc.need_intensity.toFixed(1)}</b>need intensity</div>
+      <div><b>${sc.product.toFixed(0)}</b>product / 100</div>
+      <div><b>${sc.need_model.toFixed(1)} / ${sc.need_features.toFixed(1)}</b>need: model / evidence</div>
+    </div>
+    <div class="pulls"><div>${esc(sp.pull_a)}</div><div class="x">×</div><div>${esc(sp.pull_b)}</div></div>
+    ${sp.skeleton?`<p class="skeleton">Skeleton: ${esc(sp.skeleton)}</p>`:""}
+    ${sp.collisions.length?`<h3>Collisions</h3><div class="cards">${sp.collisions.map(c=>card(c,run,sp)).join("")}</div>`:`<p class="empty">No collision cards for this space.</p>`}
+    <h3>The cultural gap</h3>
+    <p>${esc(sc.distance_rationale)}</p><p class="skeleton">${esc(sp.why_unnamed)}</p>
+    ${sc.existing_names.length?`<ul class="ev">${sc.existing_names.map(n=>`<li><b>${esc(n.term)}</b>: ${esc(n.closeness)} ${link(n.source)}</li>`).join("")}</ul>`:""}
+    <h3>Evidence</h3>
+    <ul class="ev">${ev.map(s=>`<li><span class="k">${esc(s.id)} · ${esc(s.kind)} · w${s.emotional_weight}</span> ${esc(s.observation)} ${s.verbatim?`<span class="q">“${esc(s.verbatim)}”</span>`:""} ${link(s.source)}</li>`).join("")}</ul>
+    ${cb?`<h3>Conscience brief (for you to weigh, not a verdict)</h3><dl class="cons">
+      <dt>Gives</dt><dd>${esc(cb.gives)}</dd><dt>Takes</dt><dd>${esc(cb.takes)}</dd>
+      <dt>Who is vulnerable</dt><dd>${esc(cb.who_is_vulnerable)}</dd>
+      <dt>Exploitation vectors</dt><dd>${cb.exploitation_vectors.map(esc).join("; ")}</dd>
+      <dt>Honest version</dt><dd>${esc(cb.honest_version)}</dd>
+      <dt>Questions for you</dt><dd><ul class="ev">${cb.questions_for_operator.map(q=>`<li>${esc(q)}</li>`).join("")}</ul></dd></dl>`:""}
+    <details><summary>Latent dive: ${sp.latent.filter(l=>l.verified).length} verified, ${sp.latent.filter(l=>!l.verified).length} rejected · seeds: ${sp.seed_domains.map(esc).join(", ")}</summary>
+      <p class="skeleton">Banned as too obvious: ${sp.banned_obvious.map(esc).join(", ")}</p>
+      <ul class="ev">${sp.latent.map(l=>`<li>${l.verified?"✓":"✗"} <b>${esc(l.name)}</b> <span class="k">${esc(l.domain)}${l.from_seed?"":" · wildcard"} · obviousness ${l.obviousness}</span><br>${esc(l.mechanism)} ${link(l.source)}${l.verified?"":`<br><i>${esc(l.note)}</i>`}</li>`).join("")}</ul>
+    </details>
+  </section>`;
+}
+
+function render(run){
+  const short = run.spaces.filter(s => s.shortlisted), rest = run.spaces.filter(s => !s.shortlisted);
+  const cards = short.flatMap(s => s.collisions);
+  const pending = short.filter(s => s.verdict.status==="pending").length;
+  $("#main").innerHTML = `
+    ${run.demo?'<div class="banner">Demo data. The tension signals are invented to show the shape of the output; they are not live research. The far concepts link to real reference pages.</div>':""}
+    ${run.error?`<div class="banner err">${esc(run.error)}</div>`:""}
+    <div class="toolbar">
+      <h2 class="grow" style="margin:0">${esc(run.config.focus || "Open scan")}${run.config.brand?" · "+esc(run.config.brand):""}</h2>
+      ${cards.length?'<button id="shuffle">Draw a card</button>':""}
+      <a href="/api/runs/${esc(run.id)}/export.md" target="_blank"><button>Export report</button></a>
+      <a href="/api/runs/${esc(run.id)}/export.md?brief=true" target="_blank"><button title="Only spaces you judged as giving are included">Export cleared brief</button></a>
+    </div>
+    <div class="scores" style="margin-bottom:10px">${Object.entries(run.stats).map(([k,v])=>`<div><b>${v}</b>${esc(k.replace(/_/g," "))}</div>`).join("")}</div>
+    ${run.progress.length?`<details ${run.status==="running"?"open":""}><summary>Progress · ${esc(run.status)} · ${esc(run.stage)}</summary><div class="log">${run.progress.map(p=>`<div>${esc(p.at.slice(11))} <b>[${esc(p.stage)}]</b> ${esc(p.message)}</div>`).join("")}</div></details>`:""}
+    ${map(run)}
+    ${short.length&&pending?`<p class="kicker">${pending} of ${short.length} shortlisted space(s) still need your verdict.</p>`:""}
+    ${short.map(sp => space(run, sp)).join("")}
+    ${run.status==="done"&&!short.length?'<p class="empty">Nothing cleared both bars this run. That is an honest result. Try another focus, a longer window or a lower band.</p>':""}
+    ${rest.length?`<h3>Discarded</h3><table><tr><th>Space</th><th>Distance</th><th>Need</th><th>Score</th><th>Why</th></tr>
+      ${rest.map(s=>`<tr><td><b>${esc(s.working_name)}</b><br><span class="skeleton">${esc(s.unnamed_need)}</span></td><td>${s.scores?s.scores.cultural_distance.toFixed(1):"-"}</td><td>${s.scores?s.scores.need_intensity.toFixed(1):"-"}</td><td>${s.scores?s.scores.product.toFixed(0):"-"}</td><td>${esc(s.discard_reason)}</td></tr>`).join("")}</table>`:""}
+  `;
+  document.querySelectorAll(".gate").forEach(g => g.querySelectorAll("button[data-st]").forEach(b => b.onclick = async () => {
+    await api(`/api/runs/${run.id}/spaces/${g.dataset.space}/verdict`, {method:"POST", headers:{"content-type":"application/json"},
+      body: JSON.stringify({status:b.dataset.st, note:g.querySelector(".note").value, by:g.querySelector(".by").value})});
+    openRun(run.id);
+  }));
+  const sh = $("#shuffle");
+  if(sh) sh.onclick = () => {
+    const c = cards[Math.floor(Math.random()*cards.length)];
+    $("#ov").innerHTML = `<div class="oblique"><p>${esc(c.oblique_strategy)}</p><small>${esc(c.latent_name)} · click to draw again · esc to close</small></div>`;
+    $("#ov").classList.add("on");
+    $("#ov .oblique").onclick = e => { e.stopPropagation(); sh.onclick(); };
+  };
+}
+$("#ov").onclick = () => $("#ov").classList.remove("on");
+document.addEventListener("keydown", e => { if(e.key==="Escape") $("#ov").classList.remove("on"); });
+loadRuns();
+</script>
+</body>
+</html>
