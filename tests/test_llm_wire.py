@@ -75,3 +75,36 @@ def test_structured_sends_schema_and_parses():
     assert req["output_config"]["effort"] == "medium"
     assert req["output_config"]["format"]["type"] == "json_schema"
     assert out.signals[0].kind == "shame"
+
+
+def test_workspace_header_from_env(monkeypatch):
+    from culture_crash.llm import make_client
+
+    seen_headers = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen_headers.append(request.headers.get("anthropic-workspace-id"))
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"},
+                               content=sse(message([{"type": "text", "text": '{"signals": []}'}], "end_turn")))
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "wrkspc_123")
+    client = make_client()
+    client = client.with_options(http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)))
+    ClaudeLLM(client=client).structured("sys", "x", SignalExtraction)
+    assert seen_headers == ["wrkspc_123"]
+
+
+def test_workspace_error_is_explained():
+    import pytest
+
+    from culture_crash.llm import EngineError
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(400, json={"type": "error", "error": {"type": "invalid_request_error",
+                               "message": "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header"}})
+
+    client = anthropic.Anthropic(api_key="test", max_retries=0,
+                                 http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)))
+    with pytest.raises(EngineError, match="ANTHROPIC_WORKSPACE_ID"):
+        ClaudeLLM(client=client).preflight()

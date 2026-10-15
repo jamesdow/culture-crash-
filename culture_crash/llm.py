@@ -12,6 +12,7 @@ and the pipeline drops anything that points elsewhere.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Protocol, TypeVar
 
@@ -48,12 +49,20 @@ class ClaudeLLM:
     def __init__(self, model: str = "claude-opus-5-5", effort: str = "high", client: anthropic.Anthropic | None = None):
         self.model = model
         self.effort = effort
-        self.client = client or anthropic.Anthropic(max_retries=4)
+        self.client = client or make_client()
 
     def preflight(self) -> None:
         """Fail fast, before any scraping, if credentials or the model are wrong."""
         try:
             self.client.models.retrieve(self.model)
+        except anthropic.BadRequestError as e:
+            if "workspace" in str(e).lower():
+                raise EngineError(
+                    "This API key isn't tied to a workspace. Either create a key inside a workspace "
+                    "(Console > Settings > Workspaces > pick one > API keys), or set ANTHROPIC_WORKSPACE_ID "
+                    "to your workspace ID (it starts with wrkspc_)."
+                ) from e
+            raise EngineError(f"The API rejected the startup check: {e}") from e
         except anthropic.NotFoundError as e:
             raise EngineError(f"Model {self.model!r} isn't available to this account.") from e
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
@@ -132,6 +141,14 @@ class ClaudeLLM:
         if text is None:
             raise EngineError("Structured call returned no text block.")
         return schema.model_validate_json(text)
+
+
+def make_client() -> anthropic.Anthropic:
+    """Standard client. Keys that aren't scoped to a workspace need the workspace named on
+    every request, which ANTHROPIC_WORKSPACE_ID supplies."""
+    workspace = os.getenv("ANTHROPIC_WORKSPACE_ID", "").strip()
+    headers = {"anthropic-workspace-id": workspace} if workspace else None
+    return anthropic.Anthropic(max_retries=4, default_headers=headers)
 
 
 def _refusal_category(msg) -> str:

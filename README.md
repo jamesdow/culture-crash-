@@ -61,6 +61,8 @@ Structured steps never write URLs. They point at numbered sources (`S1`, `S2`…
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 export ANTHROPIC_API_KEY=sk-ant-...        # or `ant auth login`. The only thing you need.
+# only if your key isn't tied to a workspace (error says "not scoped to a workspace"):
+export ANTHROPIC_WORKSPACE_ID=wrkspc_...
 # all optional (see "Where it listens"):
 export YOUTUBE_API_KEY=...                 # free; more reliable YouTube comments than yt-dlp
 export APIFY_TOKEN=...                     # richer TikTok + Instagram (captions and comments)
