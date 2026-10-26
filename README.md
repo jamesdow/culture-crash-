@@ -56,6 +56,8 @@ Cross-platform evidence counts: the evidence score includes **platform spread**,
 - **Live activity panel.** While a run is going, the page shows a progress bar across the stages and a card for every agent at work: whether it's thinking, searching or writing, the search it's running right now, a snippet of its thinking, how many results it has read, and a live timer. An agent that goes quiet for more than 90 seconds is flagged.
 - **"How we got here".** Each shortlisted space carries its full trail: the evidence, how the tension was named, the name check (with the exact searches run, as clickable links), the skeleton, the far fields drawn and the ideas banned as obvious, every far concept verified or rejected and why, and then the collision.
 - **"Dig deeper".** Every card ends with follow-up searches, places to read and an open question, all clickable, so a strategist can pick up the thread. The exported report contains the same trail and links.
+- **Nothing paid for is thrown away.** Search results are saved the moment they arrive. If a later step stalls (turning notes into evidence, say), the engine retries just that step at the end of the scan, reusing the saved searches. A platform is only marked skipped if the retry fails too, and its saved searches stay on the run.
+- **`culture-crash doctor`** checks your key, then times one streamed call to tell you whether long silences are Claude thinking or your connection (often a work VPN or proxy) holding the stream back. Run it if runs keep stalling.
 - **Resume.** If a run fails partway (a timeout, say), **Resume run** carries on from the stage where it stopped, keeping everything already found. On the command line: `culture-crash resume <run id>`.
 
 ### Citation integrity

@@ -76,6 +76,12 @@ def cmd_resume(a: argparse.Namespace) -> int:
     return _execute(store, run, a.runs)
 
 
+def cmd_doctor(a: argparse.Namespace) -> int:
+    from .doctor import run_doctor
+
+    return run_doctor(a.model)
+
+
 def cmd_serve(a: argparse.Namespace) -> int:
     import uvicorn
 
@@ -153,6 +159,10 @@ def main(argv: list[str] | None = None) -> int:
     rs.add_argument("run_id")
     rs.add_argument("--effort", default="medium", choices=["low", "medium", "high", "xhigh", "max"])
     rs.set_defaults(fn=cmd_resume)
+
+    dr = sub.add_parser("doctor", help="check your key and whether your connection holds up streamed responses")
+    dr.add_argument("--model", default="claude-opus-5-5")
+    dr.set_defaults(fn=cmd_doctor)
 
     s = sub.add_parser("serve", help="open the web UI")
     s.add_argument("--host", default="127.0.0.1")

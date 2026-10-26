@@ -155,6 +155,13 @@ class RunConfig(BaseModel):
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
 
 
+class CachedResearch(BaseModel):
+    """Search results are saved the moment they arrive, so a later step stalling never throws them away."""
+    text: str
+    sources: list[Source] = []
+    cited_excerpts: list[tuple[str, str]] = []
+
+
 class ProgressEvent(BaseModel):
     at: str
     stage: str
@@ -175,6 +182,7 @@ class Run(BaseModel):
     stats: dict[str, int] = {}
     routes: dict[str, str] = {}  # platform -> how it was reached this run
     agents: list[AgentState] = []  # live view of each unit of work, for the progress panel
+    research_cache: dict[str, CachedResearch] = {}
     error: Optional[str] = None
 
     def signal(self, sid: str) -> Optional[Signal]:

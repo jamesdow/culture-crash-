@@ -140,3 +140,25 @@ def test_timeout_retries_once_with_less_effort():
     ClaudeLLM(client=client).structured("sys", "x", SignalExtraction, effort="high")
     assert [r["output_config"]["effort"] for r in seen] == ["high", "medium"]
     assert seen[0]["thinking"] == {"type": "adaptive", "display": "summarized"}
+
+
+def _doctor_with(handler, monkeypatch):
+    from culture_crash import doctor
+
+    client = anthropic.Anthropic(api_key="test", max_retries=0,
+                                 http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)))
+    real = doctor.ClaudeLLM
+    monkeypatch.setattr(doctor, "ClaudeLLM", lambda model: real(model=model, client=client))
+    return doctor.run_doctor()
+
+
+def test_doctor_healthy_stream(monkeypatch, capsys):
+    def handler(request):
+        if request.url.path.endswith("/models/claude-opus-5-5"):
+            return httpx2.Response(200, json={"id": "claude-opus-5-5", "type": "model", "display_name": "x",
+                                              "created_at": "2026-01-01T00:00:00Z"})
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"},
+                               content=sse(message([{"type": "text", "text": "ok"}], "end_turn")))
+
+    assert _doctor_with(handler, monkeypatch) == 0
+    assert "Streaming is healthy" in capsys.readouterr().out

@@ -213,3 +213,51 @@ def test_agents_are_recorded(tmp_path):
     hot = next(s for s in run.spaces if s.shortlisted)
     assert any(a.space_id == hot.id and a.stage == "latent" for a in run.agents)
     assert hot.collisions[0].dig_deeper == ["search: hefted flocks"]
+
+
+def test_posts_are_read_in_batches_and_one_slow_batch_is_survivable(tmp_path, monkeypatch):
+    import culture_crash.pipeline as pl
+
+    monkeypatch.setattr(pl, "POST_BATCH", 4)
+
+    class OneSlowBatch(FakeLLM):
+        posts_calls = 0
+
+        def structured(self, system, prompt, schema, effort=None):
+            if schema is SignalExtraction and "posts and comments" in prompt:
+                self.posts_calls += 1
+                assert effort == "low"
+                if "thing number 0" in prompt:  # the batch holding post 0 stalls
+                    raise TimeoutError("took too long")
+            return super().structured(system, prompt, schema, effort)
+
+    llm = OneSlowBatch()
+    store = RunStore(tmp_path)
+    run = Run(id="20260101-000000-b0b0", config=RunConfig(seed=1, platforms=["reddit"]))
+    Engine(llm, store, routes=fake_routes).run(run)
+    assert llm.posts_calls == 3  # 10 posts in batches of 4
+    assert run.status == "done", run.error
+    reddit = [s for s in run.signals if s.source.platform == "reddit"]
+    assert reddit and all("comments/0" not in s.source.url for s in reddit)
+    assert any("batches took too long" in p.message for p in run.progress)
+
+
+def test_stalled_step_is_retried_without_redoing_searches(tmp_path):
+    class StallsOnce(FakeLLM):
+        stalled = False
+
+        def structured(self, system, prompt, schema, effort=None):
+            if schema is SignalExtraction and "tiktok.com" in prompt and not self.stalled:
+                self.stalled = True
+                raise TimeoutError("took too long")
+            return super().structured(system, prompt, schema, effort)
+
+    llm = StallsOnce()
+    store = RunStore(tmp_path)
+    run = Run(id="20260101-000000-5ec0", config=RunConfig(seed=1, platforms=["tiktok"]))
+    Engine(llm, store, routes=fake_routes).run(run)
+    assert run.status == "done", run.error
+    assert llm.domains.count(["tiktok.com"]) == 1  # searched once; the retry reused the saved results
+    assert any(s.source.platform == "tiktok" for s in run.signals)
+    assert "tiktok" in run.research_cache and "sources_lost" not in run.stats
+    assert any("Second try for tiktok" in p.message for p in run.progress)

@@ -13,6 +13,7 @@ and the pipeline drops anything that points elsewhere.
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Protocol, TypeVar
 
@@ -28,8 +29,8 @@ T = TypeVar("T", bound=BaseModel)
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 WEB_SEARCH_TOOL = "web_search_20260209"
 MAX_PAUSE_RESUMES = 2  # each resume allows another round of searches; more rarely adds signal
-# Generous overall, but a stream that goes silent for 5 minutes is treated as dropped.
-STREAM_TIMEOUT = httpx2.Timeout(900.0, connect=30.0, read=300.0)
+# Generous overall, but a stream that goes silent for 3 minutes is treated as dropped.
+STREAM_TIMEOUT = httpx2.Timeout(900.0, connect=30.0, read=180.0)
 FINAL_ANSWER_RULE = (
     "\n\nImportant: do all of your searching first. Then write your complete notes, with "
     "citations, in your final answer. Anything you write between searches is discarded."
@@ -87,6 +88,7 @@ class ClaudeLLM:
         """One streamed call. Thinking summaries are streamed so the connection never sits
         silent for minutes while the model works; one retry if the stream still drops."""
         for attempt in range(2):
+            seen = _StreamLog()
             try:
                 with self.client.with_options(timeout=STREAM_TIMEOUT).beta.messages.stream(
                     model=self.model,
@@ -97,12 +99,13 @@ class ClaudeLLM:
                 ) as stream:
                     tracker = activity.current.get()
                     for event in stream:  # feed the live progress panel
+                        seen.note(getattr(event, "type", "?"))
                         if tracker:
                             tracker.on_event(event)
                     return stream.get_final_message()
             except (anthropic.APITimeoutError, anthropic.APIConnectionError, httpx2.TimeoutException, httpx2.TransportError) as e:
                 if attempt == 1:
-                    raise EngineError(f"Claude call timed out twice ({type(e).__name__}). Resume the run to retry from here.") from e
+                    raise EngineError(f"Claude took too long twice ({type(e).__name__}; {seen.describe()}).") from e
                 # Second try: think less, so the call is shorter.
                 cfg = dict(kwargs.get("output_config") or {})
                 cfg["effort"] = {"max": "high", "xhigh": "high", "high": "medium"}.get(cfg.get("effort", ""), "low")
@@ -172,6 +175,29 @@ class ClaudeLLM:
         if text is None:
             raise EngineError("Structured call returned no text block.")
         return schema.model_validate_json(text)
+
+
+class _StreamLog:
+    """What a stream last said, so a timeout can explain itself (model silent vs. connection held up)."""
+
+    def __init__(self):
+        self.t0 = time.monotonic()
+        self.first: float | None = None
+        self.last_t = self.t0
+        self.last = "nothing"
+        self.n = 0
+
+    def note(self, kind: str) -> None:
+        now = time.monotonic()
+        if self.first is None:
+            self.first = now - self.t0
+        self.n, self.last, self.last_t = self.n + 1, kind, now
+
+    def describe(self) -> str:
+        if not self.n:
+            return f"no response at all for {time.monotonic() - self.t0:.0f}s"
+        return (f"{self.n} events; first after {self.first:.0f}s; last was '{self.last}' "
+                f"{time.monotonic() - self.last_t:.0f}s before giving up")
 
 
 def _api_message(e: anthropic.APIStatusError) -> str:

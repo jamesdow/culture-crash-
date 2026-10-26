@@ -14,6 +14,7 @@ from .activity import agent, current
 from . import scoring, seeds
 from .llm import LLM, EngineError, Research
 from .models import (
+    CachedResearch,
     SIGNAL_KINDS,
     Collision,
     LatentConcept,
@@ -29,6 +30,7 @@ from .schemas import ClusterResult, CollisionSet, ConscienceOut, LatentDive, Lat
 from .store import RunStore
 
 MAX_WORKERS = 6
+POST_BATCH = 20  # posts per extraction call; small batches are fast and fail independently
 PLATFORM_NAMES = {"reddit": "Reddit", "tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube"}
 
 
@@ -91,6 +93,18 @@ class Engine:
         with agent(self.store, run, label, stage, space_id):
             return fn(*args)
 
+    def _research(self, run: Run, key: str, system: str, prompt: str, **kw) -> Research:
+        """Run a search, or reuse the saved one: searches already paid for are never redone."""
+        cached = run.research_cache.get(key)
+        if cached:
+            self._step("reading", f"Reusing {len(cached.sources)} saved search results")
+            return Research(text=cached.text, sources=list(cached.sources), cited_excerpts=list(cached.cited_excerpts))
+        research = self.llm.research(system, prompt, **kw)
+        with self.store._lock:
+            run.research_cache[key] = CachedResearch(text=research.text, sources=research.sources, cited_excerpts=research.cited_excerpts)
+            self.store.save(run)
+        return research
+
     @staticmethod
     def _step(status, text: str) -> None:
         t = current.get()
@@ -141,20 +155,32 @@ class Engine:
         found: list[Signal] = []
         all_sources: dict[str, Source] = {}
         dropped = 0
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-            futures = {pool.submit(fn): name for name, fn in jobs.items()}
-            for fut in as_completed(futures):
-                name = futures[fut]
-                try:
-                    sigs, srcs, drop = fut.result()
-                except Exception as e:
-                    self.store.log(run, "scan", f"{name} failed: {e}")
-                    continue
-                found.extend(sigs)
-                dropped += drop
-                for s in srcs:
-                    all_sources.setdefault(s.url, s)
-                self.store.log(run, "scan", f"{name}: {len(sigs)} grounded signal(s) from {len(srcs)} source(s).")
+        failed: dict[str, Callable] = {}
+        for attempt in (1, 2):
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+                futures = {pool.submit(fn): name for name, fn in jobs.items()}
+                for fut in as_completed(futures):
+                    name = futures[fut]
+                    try:
+                        sigs, srcs, drop = fut.result()
+                    except Exception as e:
+                        failed[name] = jobs[name]
+                        self.store.log(run, "scan", f"{name}: didn't finish ({e})."
+                                       + (" Retrying once the others are done." if attempt == 1 else ""))
+                        continue
+                    found.extend(sigs)
+                    dropped += drop
+                    for s in srcs:
+                        all_sources.setdefault(s.url, s)
+                    self.store.log(run, "scan", f"{name}: {len(sigs)} grounded signal(s) from {len(srcs)} source(s).")
+            if not failed or attempt == 2:
+                break
+            # Second chance, on its own with no competition: saved searches are reused, so only the stalled step reruns.
+            jobs, failed = dict(failed), {}
+            self.store.log(run, "scan", f"Second try for {', '.join(jobs)}, reusing saved searches.")
+        if failed:
+            run.stats["sources_lost"] = len(failed)
+            self.store.log(run, "scan", f"Still missing after a second try: {', '.join(failed)}. Their saved searches are kept on the run.")
 
         seen, unique = set(), []
         for s in found:
@@ -189,12 +215,13 @@ class Engine:
     def _extract(self, kind_hint: str, research: Research) -> tuple[list[Signal], int]:
         self._step("thinking", f"Turning notes from {len(research.sources)} sources into evidence")
         listing, refs = source_list(research.sources)
-        out = self.llm.structured(P.EXTRACT_SYSTEM, P.extract_prompt(kind_hint, research.text, listing), SignalExtraction, effort="medium")
+        # Mechanical step: low effort keeps it fast and stops it going silent for minutes.
+        out = self.llm.structured(P.EXTRACT_SYSTEM, P.extract_prompt(kind_hint, research.text, listing), SignalExtraction, effort="low")
         return self._ground(out, refs)
 
     def _scan_web(self, run: Run, kind: str) -> tuple[list[Signal], list[Source], int]:
         self._step("searching", "Hunting the open web")
-        research = self.llm.research(P.SCAN_SYSTEM, P.scan_prompt(kind, run.config), max_searches=6)
+        research = self._research(run, f"web:{kind}", P.SCAN_SYSTEM, P.scan_prompt(kind, run.config), max_searches=6)
         sigs, dropped = self._extract(kind, research)
         return sigs, research.sources, dropped
 
@@ -209,8 +236,8 @@ class Engine:
             self.store.set_route(run, platform, "web search on " + ", ".join(DOMAINS[platform]))
             self.store.log(run, "scan", f"{platform}: no direct route ({e}). Using web search restricted to {', '.join(DOMAINS[platform])}.")
             self._step("searching", f"Searching {', '.join(DOMAINS[platform])}")
-            research = self.llm.research(P.SCAN_SYSTEM, P.platform_search_prompt(platform, cfg), max_searches=8,
-                                         allowed_domains=DOMAINS[platform])
+            research = self._research(run, platform, P.SCAN_SYSTEM, P.platform_search_prompt(platform, cfg), max_searches=6,
+                                      allowed_domains=DOMAINS[platform])
             for src in research.sources:
                 src.origin = "web-search"
             sigs, dropped = self._extract("mixed (decide per finding)", research)
@@ -219,14 +246,38 @@ class Engine:
         self.store.set_route(run, platform, res.route)
         self.store.log(run, "scan", f"{platform}: {len(res.posts)} posts via {res.route}.")
         sources = [_post_source(p, res.route) for p in res.posts]
-        _, refs = source_list(sources)
-        block = "\n\n".join(
-            f"S{i}. [{p.context}] (engagement {p.engagement})" + (f"\nTITLE: {p.title}" if p.title else "") + f"\nTEXT: {p.text or '(none)'}"
-            for i, p in enumerate(res.posts, 1)
-        )
-        self._step("thinking", f"Reading {len(res.posts)} posts from {res.route}")
-        out = self.llm.structured(P.EXTRACT_SYSTEM, P.posts_prompt(platform, block, cfg), SignalExtraction, effort="medium")
-        sigs, dropped = self._ground(out, refs)
+        batches = [list(range(i, min(i + POST_BATCH, len(res.posts)))) for i in range(0, len(res.posts), POST_BATCH)]
+        self._step("thinking", f"Reading {len(res.posts)} posts from {res.route}, in {len(batches)} batch(es)")
+        tracker = current.get()
+
+        def read_batch(idx: list[int]) -> tuple[list[Signal], int]:
+            token = current.set(tracker)  # keep reporting to this platform's card
+            try:
+                _, refs = source_list([sources[i] for i in idx])
+                block = "\n\n".join(
+                    f"S{n}. [{res.posts[i].context}] (engagement {res.posts[i].engagement})"
+                    + (f"\nTITLE: {res.posts[i].title}" if res.posts[i].title else "") + f"\nTEXT: {res.posts[i].text or '(none)'}"
+                    for n, i in enumerate(idx, 1)
+                )
+                out = self.llm.structured(P.EXTRACT_SYSTEM, P.posts_prompt(platform, block, cfg), SignalExtraction, effort="low")
+                return self._ground(out, refs)
+            finally:
+                current.reset(token)
+
+        sigs: list[Signal] = []
+        dropped, failures = 0, []
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            for fut in as_completed([pool.submit(read_batch, b) for b in batches]):
+                try:
+                    got, d = fut.result()
+                    sigs += got
+                    dropped += d
+                except Exception as e:  # one slow batch costs only its own posts
+                    failures.append(e)
+        if failures and not sigs:
+            raise failures[0]
+        if failures:
+            self.store.log(run, "scan", f"{platform}: {len(failures)} of {len(batches)} batches took too long and were skipped.")
         return sigs, sources, dropped
 
     # ---- 2. cluster -----------------------------------------------------
