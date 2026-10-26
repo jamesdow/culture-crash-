@@ -133,7 +133,7 @@ th{color:var(--muted);font-weight:500}
       <div><label>Band (0-10)</label><input name="band" type="number" value="5.5" step="0.5" min="0" max="10"></div>
     </div>
     <div class="row">
-      <div><label>Effort</label><select name="effort"><option>medium</option><option selected>high</option><option>xhigh</option><option>max</option></select></div>
+      <div><label>Effort</label><select name="effort"><option selected>medium</option><option>high</option><option>xhigh</option><option>max</option></select></div>
       <div><label>Seed (optional)</label><input name="seed" type="number" placeholder="random"></div>
     </div>
     <label>Where to listen</label>
@@ -320,7 +320,7 @@ function render(run){
   const pending = short.filter(s => s.verdict.status==="pending").length;
   $("#main").innerHTML = `
     ${run.demo?'<div class="banner">Demo data. The tension signals are invented to show the shape of the output; they are not live research. The far concepts link to real reference pages.</div>':""}
-    ${run.error?`<div class="banner err">${esc(run.error)}</div>`:""}
+    ${run.error?`<div class="banner err">${esc(run.error)}${run.status==="error"&&!run.demo?` <button id="resume" style="margin-left:8px">Resume run</button>`:""}</div>`:""}
     <div class="toolbar">
       <h2 class="grow" style="margin:0">${esc(run.config.focus || "Open scan")}${run.config.brand?" · "+esc(run.config.brand):""}</h2>
       ${cards.length?'<button id="shuffle">Draw a card</button>':""}
@@ -342,6 +342,8 @@ function render(run){
       body: JSON.stringify({status:b.dataset.st, note:g.querySelector(".note").value, by:g.querySelector(".by").value})});
     openRun(run.id);
   }));
+  const rb = $("#resume");
+  if(rb) rb.onclick = async () => { rb.disabled = true; await api(`/api/runs/${run.id}/resume`, {method:"POST"}); openRun(run.id); };
   const sh = $("#shuffle");
   if(sh) sh.onclick = () => {
     const c = cards[Math.floor(Math.random()*cards.length)];

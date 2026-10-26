@@ -46,13 +46,11 @@ def create_app(runs_dir: str = "runs") -> FastAPI:
             for r in store.list()
         ]
 
-    @app.post("/api/runs")
-    def start_run(cfg: RunConfig):
+    def launch(run: Run) -> None:
         from .llm import ClaudeLLM
         from .pipeline import Engine
 
-        run = Run(id=store.new_id(), config=cfg)
-        store.save(run)
+        cfg = run.config
         live[run.id] = run
 
         def work() -> None:
@@ -65,6 +63,26 @@ def create_app(runs_dir: str = "runs") -> FastAPI:
                 live.pop(run.id, None)
 
         threading.Thread(target=work, daemon=True).start()
+
+    @app.post("/api/runs")
+    def start_run(cfg: RunConfig):
+        run = Run(id=store.new_id(), config=cfg)
+        store.save(run)
+        launch(run)
+        return {"id": run.id}
+
+    @app.post("/api/runs/{run_id}/resume")
+    def resume_run(run_id: str):
+        if run_id in live:
+            raise HTTPException(409, "run already in progress")
+        run = get(run_id)
+        if run.demo or run.status != "error":
+            raise HTTPException(409, "only a failed run can be resumed")
+        if run.config.effort in ("high", "xhigh", "max"):
+            run.config.effort = "medium"  # the usual cause of failure is a call running too long
+        run.status = "queued"
+        store.save(run)
+        launch(run)
         return {"id": run.id}
 
     @app.post("/api/demo")

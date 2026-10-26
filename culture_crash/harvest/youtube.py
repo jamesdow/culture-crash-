@@ -9,7 +9,9 @@ If both fail, the pipeline uses Claude web search restricted to youtube.com.
 
 from __future__ import annotations
 
+import itertools
 import os
+from urllib.parse import quote_plus
 from datetime import datetime, timezone
 
 from .base import HarvestSpec, Post, Unavailable, check_status, gather, http_client, safe_get
@@ -89,12 +91,14 @@ class YtDlp:
         with yt_dlp.YoutubeDL({**base_opts, "extract_flat": True}) as ydl:
             for q in _queries(spec)[:4]:
                 try:
-                    res = ydl.extract_info(f"ytsearchdate6:{q}", download=False) or {}
+                    # sp=CAISAhAB: videos only, newest first (yt-dlp dropped its ytsearchdate shortcut)
+                    url = f"https://www.youtube.com/results?search_query={quote_plus(q)}&sp=CAISAhAB"
+                    res = ydl.extract_info(url, download=False) or {}
                 except Exception as e:
                     if not ids:
                         raise Unavailable(f"search failed: {str(e)[:120]}") from e
                     break
-                for entry in res.get("entries") or []:
+                for entry in itertools.islice(res.get("entries") or [], 6):  # entries page lazily; never list() them
                     if entry and entry.get("id"):
                         ids[entry["id"]] = entry.get("title", "")
 

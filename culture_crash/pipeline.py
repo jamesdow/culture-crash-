@@ -88,11 +88,18 @@ class Engine:
         run.status = "running"
         cfg = run.config
         self.rng = random.Random(cfg.seed if cfg.seed is not None else random.randrange(1 << 30))
+        resuming = bool(run.signals)
+        run.error = None
         try:
             if hasattr(self.llm, "preflight"):
                 self.llm.preflight()
-            self._scan(run)
-            self._cluster(run)
+            if resuming:
+                self.store.log(run, "resume", f"Resuming: keeping {len(run.signals)} signals and {len(run.spaces)} spaces already found.")
+            # Each stage skips work already done, so a failed run can be resumed where it stopped.
+            if not run.signals:
+                self._scan(run)
+            if not run.spaces:
+                self._cluster(run)
             self._score(run)
             self._deepen(run)
             run.status, run.stage = "done", "done"
@@ -229,9 +236,13 @@ class Engine:
 
     def _score(self, run: Run) -> None:
         cfg = run.config
-        self.store.log(run, "score", "Scoring each space: cultural distance x need intensity.")
+        todo = [sp for sp in run.spaces if sp.scores is None]
+        if todo:
+            self.store.log(run, "score", f"Scoring {len(todo)} space(s): cultural distance x need intensity.")
+        for sp in todo:
+            sp.discard_reason = ""
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-            futures = {pool.submit(self._score_one, run, sp): sp for sp in run.spaces}
+            futures = {pool.submit(self._score_one, run, sp): sp for sp in todo}
             for fut in as_completed(futures):
                 sp = futures[fut]
                 try:
@@ -290,15 +301,17 @@ class Engine:
     def _deepen(self, run: Run) -> None:
         cfg = run.config
         shortlisted = [s for s in run.spaces if s.shortlisted]
-        if not shortlisted:
+        todo = [s for s in shortlisted if s.conscience is None]  # finished spaces are kept on resume
+        if not todo:
             return
-        used: set[str] = set()
-        for sp in shortlisted:  # draw seeds up front so no two spaces share a domain
-            sp.seed_domains = seeds.draw(cfg.seeds_per_space, self.rng, exclude=used)
-            used.update(sp.seed_domains)
+        used: set[str] = {d for s in shortlisted for d in s.seed_domains}
+        for sp in todo:  # draw seeds up front so no two spaces share a domain
+            if not sp.seed_domains:
+                sp.seed_domains = seeds.draw(cfg.seeds_per_space, self.rng, exclude=used)
+                used.update(sp.seed_domains)
         self.store.log(run, "latent", "Diving into latent space for far, structurally matching concepts.")
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-            futures = {pool.submit(self._deepen_one, run, sp): sp for sp in shortlisted}
+            futures = {pool.submit(self._deepen_one, run, sp): sp for sp in todo}
             for fut in as_completed(futures):
                 sp = futures[fut]
                 try:

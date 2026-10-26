@@ -63,7 +63,8 @@ def test_research_collects_sources_and_resumes_pause_turn():
     assert len(seen) == 2 and seen[1]["messages"][-1]["role"] == "assistant"  # resumed after pause_turn
     assert [s.url for s in r.sources] == ["https://www.reddit.com/r/x/1", "https://forum.example/2"]
     assert r.cited_excerpts == [("https://forum.example/2", "my janky system")]
-    assert r.text == "Finding one."
+    # short notes are topped up with what the citations quote, so extraction still has evidence
+    assert r.text.startswith("Finding one.") and "my janky system (https://forum.example/2)" in r.text
 
 
 def test_structured_sends_schema_and_parses():
@@ -122,3 +123,20 @@ def test_rejected_key_shows_api_reason():
                                  http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)))
     with pytest.raises(EngineError, match="HTTP 401: invalid x-api-key"):
         ClaudeLLM(client=client).preflight()
+
+
+def test_timeout_retries_once_with_less_effort():
+    seen: list[dict] = []
+    ok = sse(message([{"type": "text", "text": '{"signals": []}'}], "end_turn"))
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(json.loads(request.content))
+        if len(seen) == 1:
+            raise httpx2.ReadTimeout("The read operation timed out", request=request)
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"}, content=ok)
+
+    client = anthropic.Anthropic(api_key="test", max_retries=0,
+                                 http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)))
+    ClaudeLLM(client=client).structured("sys", "x", SignalExtraction, effort="high")
+    assert [r["output_config"]["effort"] for r in seen] == ["high", "medium"]
+    assert seen[0]["thinking"] == {"type": "adaptive", "display": "summarized"}

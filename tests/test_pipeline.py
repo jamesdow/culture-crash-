@@ -172,3 +172,32 @@ def test_server_demo_and_verdict(tmp_path):
     assert "DEMO DATA" in c.get(f"/api/runs/{rid}/export.md").text
     assert c.get("/api/runs/../../etc").status_code == 404
     assert c.get("/").status_code == 200
+
+
+def test_resume_continues_after_failure(tmp_path):
+    store = RunStore(tmp_path)
+
+    class FlakyCluster(FakeLLM):
+        fail = True
+
+        def structured(self, system, prompt, schema, effort=None):
+            if schema is ClusterResult and self.fail:
+                self.fail = False
+                raise TimeoutError("The read operation timed out")
+            return super().structured(system, prompt, schema, effort)
+
+    llm = FlakyCluster()
+    run = Run(id="20260101-000000-beef", config=RunConfig(seed=1, shortlist=1, cards_per_space=1, platforms=["web"]))
+    Engine(llm, store, routes=fake_routes).run(run)
+    assert run.status == "error" and "timed out" in run.error and run.signals and not run.spaces
+
+    scans_before = llm.calls.count("research")
+    run = store.load(run.id)
+    Engine(llm, store, routes=fake_routes).run(run)
+    assert run.status == "done", run.error
+    assert any(p.stage == "resume" for p in run.progress)
+    hot = next(s for s in run.spaces if s.shortlisted)
+    assert hot.collisions and hot.conscience
+    # Scan was not repeated: only scoring and verification searches ran on resume.
+    resumed_research = llm.calls.count("research") - scans_before
+    assert resumed_research == len(run.spaces) + 1

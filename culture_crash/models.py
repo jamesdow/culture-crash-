@@ -149,7 +149,7 @@ class RunConfig(BaseModel):
     cards_per_space: int = 3
     seed: Optional[int] = None
     model: str = "claude-opus-5-5"
-    effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
+    effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
 
 
 class ProgressEvent(BaseModel):

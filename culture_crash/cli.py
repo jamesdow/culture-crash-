@@ -22,17 +22,21 @@ def _config(a: argparse.Namespace) -> RunConfig:
 
 
 def cmd_run(a: argparse.Namespace) -> int:
+    store = RunStore(a.runs)
+    run = Run(id=store.new_id(), config=_config(a))
+    store.save(run)
+    return _execute(store, run, a.runs)
+
+
+def _execute(store: RunStore, run: Run, runs_dir: str) -> int:
     from .llm import ClaudeLLM
     from .pipeline import Engine
     from .report import render
 
-    store = RunStore(a.runs)
-    cfg = _config(a)
-    run = Run(id=store.new_id(), config=cfg)
-    store.save(run)
+    cfg = run.config
     print(f"run {run.id}  (stored in {store.path(run.id)})", flush=True)
 
-    printed = 0
+    printed = len(run.progress)
     done = threading.Event()
 
     def tail() -> None:
@@ -51,14 +55,25 @@ def cmd_run(a: argparse.Namespace) -> int:
     t.join()
     for ev in run.progress[printed:]:
         print(f"  [{ev.stage:8}] {ev.message}")
-    md = Path(a.runs) / f"{run.id}.md"
+    md = Path(runs_dir) / f"{run.id}.md"
     md.write_text(render(run), encoding="utf-8")
     print(f"\nreport: {md}")
     if run.status == "error":
         print(f"error: {run.error}", file=sys.stderr)
+        print(f"Pick up where it stopped with: culture-crash resume {run.id}", file=sys.stderr)
         return 1
     print("Next: judge each shortlisted space with `culture-crash verdict` or in the web UI (`culture-crash serve`).")
     return 0
+
+
+def cmd_resume(a: argparse.Namespace) -> int:
+    store = RunStore(a.runs)
+    run = store.load(a.run_id)
+    if run.status != "error":
+        print(f"run {run.id} is {run.status}; only a failed run can be resumed", file=sys.stderr)
+        return 1
+    run.config.effort = a.effort
+    return _execute(store, run, a.runs)
 
 
 def cmd_serve(a: argparse.Namespace) -> int:
@@ -131,8 +146,13 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--cards", type=int, default=3, help="collision cards kept per space")
     r.add_argument("--seed", type=int, help="random seed for far-domain draws")
     r.add_argument("--model", default="claude-opus-5-5")
-    r.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
+    r.add_argument("--effort", default="medium", choices=["low", "medium", "high", "xhigh", "max"])
     r.set_defaults(fn=cmd_run)
+
+    rs = sub.add_parser("resume", help="continue a failed run from the stage where it stopped")
+    rs.add_argument("run_id")
+    rs.add_argument("--effort", default="medium", choices=["low", "medium", "high", "xhigh", "max"])
+    rs.set_defaults(fn=cmd_resume)
 
     s = sub.add_parser("serve", help="open the web UI")
     s.add_argument("--host", default="127.0.0.1")
