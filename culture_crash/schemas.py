@@ -91,6 +91,7 @@ class CollisionCard(BaseModel):
     surprise: float
     coherence: float
     signal_ids: list[str]
+    dig_deeper: list[str]
 
 
 class CollisionSet(BaseModel):

@@ -305,6 +305,9 @@ feeling.
 - surprise (0-10): how far this is from what the category would normally say.
 - coherence (0-10): how surely a real person living this tension would recognise themselves in it.
 - signal_ids: the evidence this card rests on.
+- dig_deeper: three to five follow-up leads for a strategist who wants to go further: exact \
+search queries to run, communities or subreddits to read, the far concept's key texts or \
+authorities, and one open question this card raises but cannot answer.
 Make one card per concept. Both scores matter: a wild card that doesn't land scores low on coherence."""
 
 

@@ -11,6 +11,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, computed_field
 
+from .activity import AgentState
+
 SignalKind = Literal["slang", "workaround", "micro_community", "shame", "friction"]
 SIGNAL_KINDS: tuple[SignalKind, ...] = ("slang", "workaround", "micro_community", "shame", "friction")
 
@@ -95,6 +97,7 @@ class Collision(BaseModel):
     coherence: float
     mad_factor: float
     signal_ids: list[str] = []
+    dig_deeper: list[str] = []  # follow-up searches and questions for whoever picks this up
 
 
 class ConscienceBrief(BaseModel):
@@ -171,6 +174,7 @@ class Run(BaseModel):
     spaces: list[Space] = []
     stats: dict[str, int] = {}
     routes: dict[str, str] = {}  # platform -> how it was reached this run
+    agents: list[AgentState] = []  # live view of each unit of work, for the progress panel
     error: Optional[str] = None
 
     def signal(self, sid: str) -> Optional[Signal]:

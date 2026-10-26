@@ -105,6 +105,39 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
 th{color:var(--muted);font-weight:500}
 .cons dt{font-weight:600;margin-top:8px}
 .cons dd{margin:2px 0 0}
+/* live activity */
+.activity{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:0 0 16px}
+.activity .head{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin-bottom:12px}
+.activity .head b{font:600 18px Fraunces,serif}
+.activity .head span{color:var(--muted);font-size:13px}
+.steps{display:flex;gap:4px;margin:0 0 14px;flex-wrap:wrap}
+.steps div{flex:1;min-width:92px;font-size:12px;padding:6px 8px;border-radius:6px;background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.steps div.done{color:var(--good);border-color:var(--good)}
+.steps div.now{color:#fff;background:var(--accent);border-color:var(--accent);animation:glow 1.6s ease-in-out infinite}
+.steps div.fail{color:#fff;background:var(--bad);border-color:var(--bad)}
+@keyframes glow{50%{opacity:.7}}
+.agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.agent{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;background:var(--bg);min-width:0}
+.agent .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.agent .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent .t{font:12px "JetBrains Mono",monospace;color:var(--muted);white-space:nowrap}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;margin:6px 0 4px;color:var(--ink)}
+.badge i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.badge.live i{background:var(--accent);animation:pulse 1s ease-in-out infinite}
+.badge.failed i{background:var(--bad)} .badge.done i{background:var(--good)}
+@keyframes pulse{50%{transform:scale(1.6);opacity:.5}}
+.agent .q{color:var(--ink);font-style:normal;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent .th{color:var(--muted);font-style:italic;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.agent .m{color:var(--muted);font-size:12px;margin-top:4px}
+.agent .quiet{color:var(--warn);font-size:12px;margin-top:4px}
+.agent.failed{border-color:var(--bad)} .agent.failed .err{color:var(--bad);font-size:12px;margin-top:4px}
+/* trail */
+ol.trail{padding-left:20px;margin:8px 0 0}
+ol.trail>li{margin:0 0 12px;font-size:14px}
+ol.trail>li>b{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.qs{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.qs a,.qs span{font:12px "JetBrains Mono",monospace;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 6px;text-decoration:none}
+ul.dig{padding-left:18px;margin:4px 0 0} ul.dig li{margin:3px 0}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;padding:20px;z-index:9}
 .overlay.on{display:flex}
 .overlay .oblique{max-width:520px;width:100%;min-height:300px;border-radius:14px;cursor:pointer}
@@ -193,11 +226,18 @@ async function loadRuns(){
   document.querySelectorAll("#runs li[data-id]").forEach(li => li.onclick = () => openRun(li.dataset.id));
 }
 
-async function openRun(id){
-  current = id; clearTimeout(timer);
+let lastSig = "";
+async function openRun(id, poll){
+  if(!poll){ current = id; lastSig = ""; }
+  clearTimeout(timer);
   const run = await api(`/api/runs/${id}`);
-  render(run); loadRuns();
-  if(run.status === "running" || run.status === "queued") timer = setTimeout(() => current===id && openRun(id), 2500);
+  if(current !== id) return;
+  // Re-render the whole page only when results change, so typing in a verdict box isn't wiped.
+  const sig = [run.status, run.progress.length, run.spaces.length, run.spaces.map(s=>s.collisions.length+(s.conscience?"c":"")+s.verdict.status).join()].join("|");
+  if(sig !== lastSig || !$("#activity")){ render(run); lastSig = sig; if(!poll) loadRuns(); }
+  else $("#activity").outerHTML = activity(run);
+  if(run.status === "running" || run.status === "queued") timer = setTimeout(() => openRun(id, true), 1500);
+  else if(poll) loadRuns();
 }
 
 $("#f").onsubmit = async e => {
@@ -264,6 +304,7 @@ function card(c, run, sp){
         <dt>Bridge</dt><dd>${esc(c.bridge)}</dd>
         <dt>Value exchange</dt><dd>${esc(c.value_exchange)}</dd>
         <dt>Risk</dt><dd>${esc(c.risk_note)}</dd>
+        ${(c.dig_deeper||[]).length ? `<dt>Dig deeper</dt><dd><ul class="dig">${c.dig_deeper.map(d => `<li>${searchLink(d)}</li>`).join("")}</ul></dd>` : ""}
         <dt>Citations</dt><dd>Far concept: ${lc?link(lc.source):"-"}<br>Tension: ${ev.map(s=>`${plat(s.source.platform)} ${link(s.source)}`).join("<br>")}</dd>
       </dl>
     </div></div>`;
@@ -307,11 +348,80 @@ function space(run, sp){
       <dt>Exploitation vectors</dt><dd>${cb.exploitation_vectors.map(esc).join("; ")}</dd>
       <dt>Honest version</dt><dd>${esc(cb.honest_version)}</dd>
       <dt>Questions for you</dt><dd><ul class="ev">${cb.questions_for_operator.map(q=>`<li>${esc(q)}</li>`).join("")}</ul></dd></dl>`:""}
-    <details><summary>Latent dive: ${sp.latent.filter(l=>l.verified).length} verified, ${sp.latent.filter(l=>!l.verified).length} rejected · seeds: ${sp.seed_domains.map(esc).join(", ")}</summary>
-      <p class="skeleton">Banned as too obvious: ${sp.banned_obvious.map(esc).join(", ")}</p>
-      <ul class="ev">${sp.latent.map(l=>`<li>${l.verified?"✓":"✗"} <b>${esc(l.name)}</b> <span class="k">${esc(l.domain)}${l.from_seed?"":" · wildcard"} · obviousness ${l.obviousness}</span><br>${esc(l.mechanism)} ${link(l.source)}${l.verified?"":`<br><i>${esc(l.note)}</i>`}</li>`).join("")}</ul>
-    </details>
+    ${trail(run, sp)}
   </section>`;
+}
+
+const STAGES = [["scan","Listen"],["cluster","Cluster"],["score","Score"],["latent","Dive & collide"],["done","Your verdict"]];
+const STAGE_OF = {scan:0, resume:0, cluster:1, score:2, latent:3, collide:3, done:4};
+const LIVE = new Set(["starting","harvesting","thinking","searching","reading","writing"]);
+const VERB = {starting:"Starting", harvesting:"Harvesting posts", thinking:"Thinking", searching:"Searching the web",
+              reading:"Reading results", writing:"Writing notes", done:"Done", failed:"Failed"};
+const dur = sec => { sec = Math.max(0, Math.round(sec)); return sec < 60 ? `${sec}s` : `${Math.floor(sec/60)}m ${String(sec%60).padStart(2,"0")}s`; };
+
+function stageIndex(run){
+  if(run.status === "done") return 4;
+  if(run.stage in STAGE_OF) return STAGE_OF[run.stage];
+  const last = [...run.progress].reverse().find(p => p.stage in STAGE_OF);  // on error, the stage that failed
+  return last ? STAGE_OF[last.stage] : 0;
+}
+
+function agentCard(a){
+  const now = Date.now()/1000, live = LIVE.has(a.status);
+  const quiet = live && now - a.last_event_at > 90;
+  const thought = (a.thought || "").replace(/\s+/g, " ").trim();
+  return `<div class="agent ${a.status==="failed"?"failed":""}">
+    <div class="top"><div class="name" title="${esc(a.label)}">${esc(a.label)}</div><div class="t">${dur((a.ended_at || now) - a.started_at)}</div></div>
+    <div class="badge ${live?"live":a.status}"><i></i>${esc(VERB[a.status] || a.status)}${a.step && live ? " · " + esc(a.step) : ""}</div>
+    ${a.last_query && live ? `<div class="q">🔎 “${esc(a.last_query)}”</div>` : ""}
+    ${thought && live ? `<div class="th">…${esc(thought.slice(-160))}</div>` : ""}
+    ${a.searches || a.sources ? `<div class="m">${a.searches} search${a.searches===1?"":"es"} · ${a.sources} result${a.sources===1?"":"s"} read</div>` : ""}
+    ${quiet ? `<div class="quiet">Quiet for ${dur(now - a.last_event_at)}. Still waiting on Claude.</div>` : ""}
+    ${a.status==="failed" ? `<div class="err">${esc(a.error)}</div>` : ""}
+  </div>`;
+}
+
+function activity(run){
+  const agents = run.agents || [];
+  const running = run.status === "running" || run.status === "queued";
+  if(!agents.length && !running) return '<div id="activity"></div>';
+  const idx = stageIndex(run), failed = run.status === "error";
+  const steps = STAGES.map(([k, label], i) => `<div class="${i < idx || (i===4 && run.status==="done") ? "done" : i === idx ? (failed ? "fail" : running ? "now" : "") : ""}">${i < idx ? "✓ " : ""}${label}</div>`).join("");
+  const live = agents.filter(a => LIVE.has(a.status)), bad = agents.filter(a => a.status==="failed"), done = agents.filter(a => a.status==="done");
+  const t0 = agents.length ? Math.min(...agents.map(a => a.started_at)) : Date.now()/1000;
+  const t1 = running ? Date.now()/1000 : Math.max(...agents.map(a => a.ended_at || a.last_event_at));
+  const searches = agents.reduce((n, a) => n + a.searches, 0), results = agents.reduce((n, a) => n + a.sources, 0);
+  return `<div class="activity" id="activity">
+    <div class="head"><b>${running ? "Working" : failed ? "Stopped" : "Finished"}</b>
+      <span>${dur(t1 - t0)} · ${live.length} agent${live.length===1?"":"s"} active · ${done.length} done${bad.length?` · ${bad.length} failed`:""} · ${searches} searches · ${results} results read</span></div>
+    <div class="steps">${steps}</div>
+    ${live.length || bad.length ? `<div class="agents">${[...live, ...bad].map(agentCard).join("")}</div>` : ""}
+    ${done.length ? `<details style="margin-top:10px"><summary>${done.length} finished agent${done.length===1?"":"s"}</summary><div class="agents" style="margin-top:8px">${done.map(agentCard).join("")}</div></details>` : ""}
+  </div>`;
+}
+
+const searchLink = q => `<a href="https://www.google.com/search?q=${encodeURIComponent(q)}" target="_blank" rel="noopener">${esc(q)}</a>`;
+
+function trail(run, sp){
+  const ag = (run.agents || []).filter(a => a.space_id === sp.id);
+  const scorerQs = ag.filter(a => a.stage === "score").flatMap(a => a.queries);
+  const diverQs = ag.filter(a => a.stage === "latent").flatMap(a => a.queries);
+  const ev = sp.signal_ids.map(id => run.signals.find(s => s.id===id)).filter(Boolean);
+  const plats = [...new Set(ev.map(s => PLAT[s.source.platform] || s.source.platform))];
+  const kinds = [...new Set(ev.map(s => s.kind.replace("_"," ")))];
+  const names = sp.scores?.existing_names || [];
+  const ok = sp.latent.filter(l => l.verified), no = sp.latent.filter(l => !l.verified);
+  return `<details><summary>How we got here: the full trail, step by step</summary><ol class="trail">
+    <li><b>Evidence</b>${ev.length} signals (${esc(kinds.join(", "))}) from ${esc(plats.join(", "))}. Each one links to its source in the Evidence list below.</li>
+    <li><b>Tension named</b>The clusterer read all the signals and found this contradiction: <i>${esc(sp.pull_a)}</i> × <i>${esc(sp.pull_b)}</i>. ${esc(sp.why_unnamed)}</li>
+    <li><b>Name check</b>${names.length ? "Closest existing names found: " + names.map(n => `<strong>${esc(n.term)}</strong> ${n.source?link(n.source):""}`).join("; ") + "." : "No established name found."}
+      ${scorerQs.length ? `<div class="qs">${scorerQs.map(q => searchLink(q)).join("")}</div>` : ""}</li>
+    ${sp.skeleton ? `<li><b>Skeleton</b>Stripped of people and culture, the shape is: <i>${esc(sp.skeleton)}</i></li>` : ""}
+    ${sp.seed_domains.length ? `<li><b>Far fields drawn</b>${sp.seed_domains.map(esc).join(", ")}.${sp.banned_obvious.length ? ` Banned as too obvious: ${sp.banned_obvious.map(esc).join(", ")}.` : ""}</li>` : ""}
+    ${sp.latent.length ? `<li><b>Concepts fact-checked</b><ul class="ev">${ok.map(l => `<li>✓ <b>${esc(l.name)}</b> <span class="k">${esc(l.domain)}${l.from_seed?"":" · wildcard"}</span> ${esc(l.mechanism)} ${link(l.source)}</li>`).join("")}${no.map(l => `<li>✗ <b>${esc(l.name)}</b>: rejected. ${esc(l.note)}</li>`).join("")}</ul>
+      ${diverQs.length ? `<div class="qs">${diverQs.map(q => searchLink(q)).join("")}</div>` : ""}</li>` : ""}
+    ${sp.collisions.length ? `<li><b>Collision</b>Each verified concept was forced against the tension. The cards above show the result, the bridge between the two, and where to dig deeper.</li>` : ""}
+  </ol></details>`;
 }
 
 function render(run){
@@ -329,7 +439,8 @@ function render(run){
     </div>
     <div class="scores" style="margin-bottom:10px">${Object.entries(run.stats).map(([k,v])=>`<div><b>${v}</b>${esc(k.replace(/_/g," "))}</div>`).join("")}</div>
     ${Object.keys(run.routes||{}).length?`<div class="routes">Reached via: ${Object.entries(run.routes).map(([k,v])=>`<b>${esc(k)}</b> ${esc(v)}`).join(" · ")}</div>`:""}
-    ${run.progress.length?`<details ${run.status==="running"?"open":""}><summary>Progress · ${esc(run.status)} · ${esc(run.stage)}</summary><div class="log">${run.progress.map(p=>`<div>${esc(p.at.slice(11))} <b>[${esc(p.stage)}]</b> ${esc(p.message)}</div>`).join("")}</div></details>`:""}
+    ${activity(run)}
+    ${run.progress.length?`<details><summary>Progress · ${esc(run.status)} · ${esc(run.stage)}</summary><div class="log">${run.progress.map(p=>`<div>${esc(p.at.slice(11))} <b>[${esc(p.stage)}]</b> ${esc(p.message)}</div>`).join("")}</div></details>`:""}
     ${map(run)}
     ${short.length&&pending?`<p class="kicker">${pending} of ${short.length} shortlisted space(s) still need your verdict.</p>`:""}
     ${short.map(sp => space(run, sp)).join("")}

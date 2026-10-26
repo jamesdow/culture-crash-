@@ -69,10 +69,10 @@ class FakeLLM:
             return CollisionSet(cards=[
                 CollisionCard(latent_name="Hefting", oblique_strategy="Graze the same hill.", mad_thought="m", bridge="b",
                               coinage=["hefted"], coinage_gloss="g", value_exchange="v", risk_note="r",
-                              surprise=8, coherence=9, signal_ids=["sig-01", "sig-77"]),
+                              surprise=8, coherence=9, signal_ids=["sig-01", "sig-77"], dig_deeper=["search: hefted flocks"]),
                 CollisionCard(latent_name="Hefting", oblique_strategy="Weak card.", mad_thought="m", bridge="b",
                               coinage=[], coinage_gloss="", value_exchange="v", risk_note="r",
-                              surprise=10, coherence=1, signal_ids=[]),
+                              surprise=10, coherence=1, signal_ids=[], dig_deeper=[]),
             ])
         if schema is ConscienceOut:
             return ConscienceOut(gives="g", takes="t", who_is_vulnerable="w", exploitation_vectors=["e"],
@@ -201,3 +201,15 @@ def test_resume_continues_after_failure(tmp_path):
     # Scan was not repeated: only scoring and verification searches ran on resume.
     resumed_research = llm.calls.count("research") - scans_before
     assert resumed_research == len(run.spaces) + 1
+
+
+def test_agents_are_recorded(tmp_path):
+    store = RunStore(tmp_path)
+    run = Run(id="20260101-000000-cafe", config=RunConfig(seed=1, shortlist=1, cards_per_space=1))
+    Engine(FakeLLM(), store, routes=fake_routes).run(run)
+    labels = [a.label for a in run.agents]
+    assert "Clusterer" in labels and "TikTok scout" in labels and any(l.startswith("Diver · ") for l in labels)
+    assert all(a.status == "done" and a.ended_at for a in run.agents)
+    hot = next(s for s in run.spaces if s.shortlisted)
+    assert any(a.space_id == hot.id and a.stage == "latent" for a in run.agents)
+    assert hot.collisions[0].dig_deeper == ["search: hefted flocks"]

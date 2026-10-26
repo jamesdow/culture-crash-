@@ -10,6 +10,7 @@ from typing import Callable
 from urllib.parse import urlparse
 
 from . import prompts as P
+from .activity import agent, current
 from . import scoring, seeds
 from .llm import LLM, EngineError, Research
 from .models import (
@@ -28,6 +29,7 @@ from .schemas import ClusterResult, CollisionSet, ConscienceOut, LatentDive, Lat
 from .store import RunStore
 
 MAX_WORKERS = 6
+PLATFORM_NAMES = {"reddit": "Reddit", "tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube"}
 
 
 # ----------------------------------------------------------------- helpers
@@ -84,6 +86,17 @@ class Engine:
         self.store = store
         self.routes = routes
 
+    def _tracked(self, run: Run, label: str, stage: str, fn, *args):
+        space_id = next((a.id for a in args if isinstance(a, Space)), "")
+        with agent(self.store, run, label, stage, space_id):
+            return fn(*args)
+
+    @staticmethod
+    def _step(status, text: str) -> None:
+        t = current.get()
+        if t:
+            t.status(status, text)
+
     def run(self, run: Run) -> Run:
         run.status = "running"
         cfg = run.config
@@ -99,7 +112,7 @@ class Engine:
             if not run.signals:
                 self._scan(run)
             if not run.spaces:
-                self._cluster(run)
+                self._tracked(run, "Clusterer", "cluster", self._cluster, run)
             self._score(run)
             self._deepen(run)
             run.status, run.stage = "done", "done"
@@ -118,10 +131,10 @@ class Engine:
         jobs: dict[str, Callable[[], tuple[list[Signal], list[Source], int]]] = {}
         if "web" in cfg.platforms:
             for kind in SIGNAL_KINDS:
-                jobs[f"web:{kind}"] = lambda k=kind: self._scan_web(run, k)
+                jobs[f"web:{kind}"] = lambda k=kind: self._tracked(run, f"Web scout · {k.replace('_', ' ')}", "scan", self._scan_web, run, k)
         for platform in cfg.platforms:
             if platform != "web":
-                jobs[platform] = lambda p=platform: self._scan_platform(run, p)
+                jobs[platform] = lambda p=platform: self._tracked(run, f"{PLATFORM_NAMES[p]} scout", "scan", self._scan_platform, run, p)
         if not jobs:
             raise EngineError("Every platform is switched off, so there is nothing to scan.")
 
@@ -174,11 +187,13 @@ class Engine:
         return signals, dropped
 
     def _extract(self, kind_hint: str, research: Research) -> tuple[list[Signal], int]:
+        self._step("thinking", f"Turning notes from {len(research.sources)} sources into evidence")
         listing, refs = source_list(research.sources)
         out = self.llm.structured(P.EXTRACT_SYSTEM, P.extract_prompt(kind_hint, research.text, listing), SignalExtraction, effort="medium")
         return self._ground(out, refs)
 
     def _scan_web(self, run: Run, kind: str) -> tuple[list[Signal], list[Source], int]:
+        self._step("searching", "Hunting the open web")
         research = self.llm.research(P.SCAN_SYSTEM, P.scan_prompt(kind, run.config), max_searches=6)
         sigs, dropped = self._extract(kind, research)
         return sigs, research.sources, dropped
@@ -187,11 +202,13 @@ class Engine:
         """Direct routes first; if every one fails, Claude web search restricted to the platform's domain."""
         cfg = run.config
         spec = HarvestSpec(focus=cfg.focus, recency_days=cfg.recency_days, subreddits=cfg.subreddits or DEFAULT_SUBREDDITS)
+        self._step("harvesting", "Trying direct routes")
         try:
             res = run_chain(self.routes(platform), spec)
         except Unavailable as e:
             self.store.set_route(run, platform, "web search on " + ", ".join(DOMAINS[platform]))
             self.store.log(run, "scan", f"{platform}: no direct route ({e}). Using web search restricted to {', '.join(DOMAINS[platform])}.")
+            self._step("searching", f"Searching {', '.join(DOMAINS[platform])}")
             research = self.llm.research(P.SCAN_SYSTEM, P.platform_search_prompt(platform, cfg), max_searches=8,
                                          allowed_domains=DOMAINS[platform])
             for src in research.sources:
@@ -207,6 +224,7 @@ class Engine:
             f"S{i}. [{p.context}] (engagement {p.engagement})" + (f"\nTITLE: {p.title}" if p.title else "") + f"\nTEXT: {p.text or '(none)'}"
             for i, p in enumerate(res.posts, 1)
         )
+        self._step("thinking", f"Reading {len(res.posts)} posts from {res.route}")
         out = self.llm.structured(P.EXTRACT_SYSTEM, P.posts_prompt(platform, block, cfg), SignalExtraction, effort="medium")
         sigs, dropped = self._ground(out, refs)
         return sigs, sources, dropped
@@ -216,6 +234,7 @@ class Engine:
     def _cluster(self, run: Run) -> None:
         cfg = run.config
         self.store.log(run, "cluster", "Clustering signals into candidate spaces of unnamed need.")
+        self._step("thinking", f"Finding the tensions under {len(run.signals)} signals")
         out = self.llm.structured(P.CLUSTER_SYSTEM, P.cluster_prompt(signals_block(run.signals), cfg.max_spaces), ClusterResult)
         known = {s.id for s in run.signals}
         spaces = []
@@ -242,7 +261,7 @@ class Engine:
         for sp in todo:
             sp.discard_reason = ""
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-            futures = {pool.submit(self._score_one, run, sp): sp for sp in todo}
+            futures = {pool.submit(self._tracked, run, f"Scorer · {sp.working_name}", "score", self._score_one, run, sp): sp for sp in todo}
             for fut in as_completed(futures):
                 sp = futures[fut]
                 try:
@@ -267,8 +286,10 @@ class Engine:
 
     def _score_one(self, run: Run, sp: Space) -> None:
         cfg = run.config
+        self._step("searching", "Checking whether this already has a name")
         research = self.llm.research(P.SCORE_RESEARCH_SYSTEM, P.score_research_prompt(space_block(sp)), max_searches=5)
         listing, refs = source_list(research.sources)
+        self._step("thinking", "Scoring distance and need")
         out = self.llm.structured(P.SCORE_SYSTEM, P.score_prompt(space_block(sp), research.text, listing), ScoreResult, effort="medium")
 
         sigs = [s for s in (run.signal(i) for i in sp.signal_ids) if s]
@@ -311,7 +332,7 @@ class Engine:
                 used.update(sp.seed_domains)
         self.store.log(run, "latent", "Diving into latent space for far, structurally matching concepts.")
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-            futures = {pool.submit(self._deepen_one, run, sp): sp for sp in todo}
+            futures = {pool.submit(self._tracked, run, f"Diver · {sp.working_name}", "latent", self._deepen_one, run, sp): sp for sp in todo}
             for fut in as_completed(futures):
                 sp = futures[fut]
                 try:
@@ -327,6 +348,7 @@ class Engine:
         sigs = [s for s in (run.signal(i) for i in sp.signal_ids) if s]
 
         # 4a. dive: escape the obvious, then search the seeded far domains.
+        self._step("thinking", "Diving into " + ", ".join(sp.seed_domains))
         dive = self.llm.structured(P.LATENT_SYSTEM, P.latent_prompt(space_block(sp), sp.seed_domains), LatentDive)
         sp.skeleton = dive.skeleton
         sp.banned_obvious = dive.first_thoughts
@@ -342,6 +364,7 @@ class Engine:
 
         # 4b. verify: nothing far-fetched gets through without a citation.
         cand_block = "\n\n".join(f"- {c.name} ({c.domain}): {c.mechanism}" for c in picks)
+        self._step("searching", f"Fact-checking {len(picks)} far concepts")
         research = self.llm.research(P.VERIFY_SYSTEM, P.verify_prompt(cand_block), max_searches=2 * len(picks))
         listing, refs = source_list(research.sources)
         checks = self.llm.structured(
@@ -375,6 +398,7 @@ class Engine:
             f"- {c.name} [{c.domain}]\n  Mechanism: {c.mechanism}\n  Rhyme: {c.structural_rhyme}" for c in verified
         )
         tension = f"{space_block(sp)}\nSkeleton: {sp.skeleton}"
+        self._step("thinking", "Colliding: " + ", ".join(c.name for c in verified))
         cards = self.llm.structured(P.COLLIDE_SYSTEM, P.collide_prompt(tension, signals_block(sigs), latent_block, cfg.brand), CollisionSet)
         known = set(sp.signal_ids)
         collisions = []
@@ -383,6 +407,7 @@ class Engine:
                 id="", latent_name=card.latent_name, oblique_strategy=card.oblique_strategy,
                 mad_thought=card.mad_thought, bridge=card.bridge, coinage=card.coinage,
                 coinage_gloss=card.coinage_gloss, value_exchange=card.value_exchange, risk_note=card.risk_note,
+                dig_deeper=card.dig_deeper,
                 surprise=scoring.clamp(card.surprise), coherence=scoring.clamp(card.coherence),
                 mad_factor=scoring.mad_factor(card.surprise, card.coherence),
                 signal_ids=[i for i in card.signal_ids if i in known] or sp.signal_ids[:3],
@@ -395,6 +420,7 @@ class Engine:
 
         # 6. conscience brief. The verdict is left to a person.
         cards_block = "\n\n".join(f"- {c.oblique_strategy}\n  {c.mad_thought}\n  Value exchange: {c.value_exchange}" for c in sp.collisions)
+        self._step("thinking", "Writing the conscience brief")
         sp.conscience = self.llm.structured(P.CONSCIENCE_SYSTEM, P.conscience_prompt(space_block(sp), cards_block, cfg.brand), ConscienceOut)
         assert sp.verdict.status == "pending", "the engine must never write a conscience verdict"
         self.store.save(run)

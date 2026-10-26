@@ -20,6 +20,7 @@ import anthropic
 import httpx2
 from pydantic import BaseModel
 
+from . import activity
 from .models import Source
 
 T = TypeVar("T", bound=BaseModel)
@@ -94,6 +95,10 @@ class ClaudeLLM:
                     thinking={"type": "adaptive", "display": "summarized"},
                     **kwargs,
                 ) as stream:
+                    tracker = activity.current.get()
+                    for event in stream:  # feed the live progress panel
+                        if tracker:
+                            tracker.on_event(event)
                     return stream.get_final_message()
             except (anthropic.APITimeoutError, anthropic.APIConnectionError, httpx2.TimeoutException, httpx2.TransportError) as e:
                 if attempt == 1:

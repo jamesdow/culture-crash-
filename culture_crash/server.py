@@ -95,6 +95,9 @@ def create_app(runs_dir: str = "runs") -> FastAPI:
 
     @app.get("/api/runs/{run_id}")
     def read_run(run_id: str):
+        if run_id in live:  # agents update it from worker threads; snapshot under the lock
+            with store._lock:
+                return live[run_id].model_dump(mode="json")
         return get(run_id)
 
     @app.post("/api/runs/{run_id}/spaces/{space_id}/verdict")

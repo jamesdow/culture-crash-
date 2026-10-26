@@ -217,6 +217,38 @@ def build_demo_run(run_id: str) -> Run:
               config=RunConfig(focus="everyday life", brand=None, seed=7),
               signals=SIGNALS, spaces=[friends, basics, pre, rot, keys])
     run.spaces.sort(key=lambda s: s.scores.product, reverse=True)
+    dig = {
+        "space-1-c1": ["hefted flock Lake District shepherds", "r/AskUK standing weekly pub night friends", "how long until a habit feels like belonging", "Open question: what happens to a heft when one friend moves away?"],
+        "space-1-c2": ["Shmita debt release meaning", "\"sorry I've been rubbish\" texting friends", "Open question: who gets to declare the jubilee?"],
+        "space-1-c3": ["change ringing method explained", "friend group rotating host rituals"],
+        "space-2-c1": ["bridge expansion joint how it works", "\"pre-tired\" plans", "Open question: is the gap the plan, or protection from it?"],
+        "space-2-c2": ["annealing heat treatment explained", "soft yes calendar invites"],
+        "space-3-c1": ["hermit crab vacancy chain research", "adults learning basic skills secretly", "r/NoStupidQuestions embarrassing adult basics", "Open question: does the chain break if anyone is watched?"],
+        "space-3-c2": ["coppicing rotation woodland", "learning to swim as an adult"],
+    }
+    for sp in (friends, pre, basics):
+        for c in sp.collisions:
+            c.dig_deeper = dig.get(c.id, [])
+    from .activity import AgentState
+    t0 = 1_760_000_000.0
+    trail = [
+        ("Reddit scout", "scan", "", ["is it weird that I set reminders to text friends", "catch-up debt"]),
+        ("TikTok scout", "scan", "", ["pre-tired tiktok", "not me learning to boil an egg at 30"]),
+        ("YouTube scout", "scan", "", ["things nobody tells you about adult friendship"]),
+        ("Clusterer", "cluster", "", []),
+        ("Scorer · Scheduled intimacy", "score", "space-1", ["friendship recession trend", "scheduling friends reminders trend name"]),
+        ("Scorer · Pre-tiredness", "score", "space-2", ["\"pre-tired\" meaning", "anticipatory exhaustion social plans"]),
+        ("Scorer · Secret beginners", "score", "space-3", ["adulting trend", "adults secretly learning basic skills"]),
+        ("Diver · Scheduled intimacy", "latent", "space-1", ["hefting sheep hefted flock", "Shmita sabbatical year debts", "change ringing method ringing"]),
+        ("Diver · Pre-tiredness", "latent", "space-2", ["expansion joint bridges thermal", "annealing metal stress relief"]),
+        ("Diver · Secret beginners", "latent", "space-3", ["hermit crab vacancy chain", "coppicing stool regrowth"]),
+    ]
+    agents = []
+    for i, (label, stage, sid, qs) in enumerate(trail):
+        start = t0 + i * 20
+        agents.append(AgentState(id=f"a{i + 1}", label=label, stage=stage, space_id=sid, status="done", started_at=start,
+                                 last_event_at=start + 70, ended_at=start + 70, searches=len(qs), queries=qs, sources=len(qs) * 9))
+    run.agents = agents
     run.stats = {"sources": 0, "signals": len(SIGNALS), "ungrounded_dropped": 0, "spaces": 5, "shortlisted": 3,
                  "latent_verified": 7, "latent_rejected": 0, "cards": 7}
     return run

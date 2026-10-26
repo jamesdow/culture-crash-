@@ -3,6 +3,8 @@ collisions, the value exchange and the conscience verdict."""
 
 from __future__ import annotations
 
+from urllib.parse import quote_plus
+
 from .models import Run, Source, Space
 
 VERDICT_LABEL = {
@@ -20,6 +22,43 @@ def _link(src: Source | None) -> str:
     if not src.url:
         return f"_{title}_"
     return f"[{title}]({src.url})"
+
+
+def _search(q: str) -> str:
+    return f"[{q}](https://www.google.com/search?q={quote_plus(q)})"
+
+
+def render_trail(run: Run, sp: Space) -> str:
+    """The process, step by step, so someone else can retrace it and dig further."""
+    agents = [a for a in run.agents if a.space_id == sp.id]
+    score_qs = [q for a in agents if a.stage == "score" for q in a.queries]
+    dive_qs = [q for a in agents if a.stage == "latent" for q in a.queries]
+    sigs = [s for s in (run.signal(i) for i in sp.signal_ids) if s]
+    out = ["### How we got here", ""]
+    out.append(f"1. **Evidence.** {len(sigs)} signals ({', '.join(sorted({s.kind for s in sigs}))}) from "
+               f"{', '.join(sorted({s.source.platform for s in sigs}))}; each is linked under Evidence.")
+    out.append(f"2. **Tension named.** {sp.pull_a} <-> {sp.pull_b}. {sp.why_unnamed}")
+    names = sp.scores.existing_names if sp.scores else []
+    check = "Closest existing names: " + "; ".join(f"{n.term} {_link(n.source) if n.source else ''}".strip() for n in names) + "." if names else "No established name found."
+    if score_qs:
+        check += " Searches run: " + "; ".join(_search(q) for q in score_qs)
+    out.append(f"3. **Name check.** {check}")
+    n = 4
+    if sp.skeleton:
+        out.append(f"{n}. **Skeleton.** {sp.skeleton}")
+        n += 1
+    if sp.seed_domains:
+        banned = f" Banned as too obvious: {', '.join(sp.banned_obvious)}." if sp.banned_obvious else ""
+        out.append(f"{n}. **Far fields drawn.** {', '.join(sp.seed_domains)}.{banned}")
+        n += 1
+    if sp.latent:
+        out.append(f"{n}. **Concepts fact-checked.**" + (" Searches run: " + "; ".join(_search(q) for q in dive_qs) if dive_qs else ""))
+        out += [f"   - {'✓' if c.verified else '✗'} {c.name} ({c.domain}): "
+                + (f"{c.mechanism} {_link(c.source)}" if c.verified else f"rejected. {c.note}") for c in sp.latent]
+        n += 1
+    if sp.collisions:
+        out.append(f"{n}. **Collision.** Each verified concept was forced against the tension; see the cards above.")
+    return "\n".join(out)
 
 
 def render_space(run: Run, sp: Space) -> str:
@@ -63,6 +102,7 @@ def render_space(run: Run, sp: Space) -> str:
                     f"- **Language for it:** {', '.join(c.coinage)}: {c.coinage_gloss}",
                     f"- **Value exchange:** {c.value_exchange}",
                     f"- **Risk:** {c.risk_note}",
+                    *([f"- **Dig deeper:** " + "; ".join(_search(d) for d in c.dig_deeper)] if c.dig_deeper else []),
                     f"- **Far concept:** {c.latent_name}" + (f" ({lc.domain}) - {_link(lc.source)}" if lc else ""),
                     "- **Tension evidence:** " + ", ".join(
                         f"{_link(s.source)}" for s in (run.signal(i) for i in c.signal_ids) if s)]
@@ -74,12 +114,7 @@ def render_space(run: Run, sp: Space) -> str:
                 f"- **Exploitation vectors:** " + "; ".join(cb.exploitation_vectors),
                 f"- **Honest version:** {cb.honest_version}",
                 "- **Questions:**"] + [f"  - {q}" for q in cb.questions_for_operator]
-    if sp.latent:
-        rejected = [c for c in sp.latent if not c.verified]
-        if rejected:
-            out += ["", "<details><summary>Far concepts that failed verification</summary>", ""]
-            out += [f"- {c.name} ({c.domain}): {c.note}" for c in rejected]
-            out += ["", "</details>"]
+    out += ["", render_trail(run, sp)]
     return "\n".join(out)
 
 

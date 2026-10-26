@@ -51,6 +51,13 @@ Every platform tries its direct routes in order. If all of them fail, it falls b
 
 Cross-platform evidence counts: the evidence score includes **platform spread**, so the same feeling surfacing independently on TikTok, Reddit and YouTube scores higher than one platform shouting.
 
+### Watching it work, and retracing it afterwards
+
+- **Live activity panel.** While a run is going, the page shows a progress bar across the stages and a card for every agent at work: whether it's thinking, searching or writing, the search it's running right now, a snippet of its thinking, how many results it has read, and a live timer. An agent that goes quiet for more than 90 seconds is flagged.
+- **"How we got here".** Each shortlisted space carries its full trail: the evidence, how the tension was named, the name check (with the exact searches run, as clickable links), the skeleton, the far fields drawn and the ideas banned as obvious, every far concept verified or rejected and why, and then the collision.
+- **"Dig deeper".** Every card ends with follow-up searches, places to read and an open question, all clickable, so a strategist can pick up the thread. The exported report contains the same trail and links.
+- **Resume.** If a run fails partway (a timeout, say), **Resume run** carries on from the stage where it stopped, keeping everything already found. On the command line: `culture-crash resume <run id>`.
+
 ### Citation integrity
 
 Structured steps never write URLs. They point at numbered sources (`S1`, `S2`…) that the search tool or Reddit actually returned. Code resolves those numbers and **drops anything that points elsewhere**: the run reports `ungrounded_dropped`. This rule covers tension signals, existing trend names and far concepts alike.
