@@ -108,3 +108,17 @@ def test_workspace_error_is_explained():
                                  http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)))
     with pytest.raises(EngineError, match="ANTHROPIC_WORKSPACE_ID"):
         ClaudeLLM(client=client).preflight()
+
+
+def test_rejected_key_shows_api_reason():
+    import pytest
+
+    from culture_crash.llm import EngineError
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(401, json={"type": "error", "error": {"type": "authentication_error", "message": "invalid x-api-key"}})
+
+    client = anthropic.Anthropic(api_key="test", max_retries=0,
+                                 http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)))
+    with pytest.raises(EngineError, match="HTTP 401: invalid x-api-key"):
+        ClaudeLLM(client=client).preflight()

@@ -66,7 +66,10 @@ class ClaudeLLM:
         except anthropic.NotFoundError as e:
             raise EngineError(f"Model {self.model!r} isn't available to this account.") from e
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
-            raise EngineError("Anthropic credentials were rejected. Check ANTHROPIC_API_KEY.") from e
+            raise EngineError(
+                f"Anthropic rejected the API key (HTTP {e.status_code}: {_api_message(e)}). "
+                "Check ANTHROPIC_API_KEY, and restart `culture-crash serve` after changing it."
+            ) from e
         except anthropic.APIConnectionError as e:
             raise EngineError("Couldn't reach the Anthropic API. Check your network.") from e
         except TypeError as e:  # the SDK found no credentials at all
@@ -141,6 +144,11 @@ class ClaudeLLM:
         if text is None:
             raise EngineError("Structured call returned no text block.")
         return schema.model_validate_json(text)
+
+
+def _api_message(e: anthropic.APIStatusError) -> str:
+    body = e.body if isinstance(e.body, dict) else {}
+    return (body.get("error") or {}).get("message") or e.message
 
 
 def make_client() -> anthropic.Anthropic:
