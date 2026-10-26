@@ -368,7 +368,7 @@ function stageIndex(run){
 
 function agentCard(a){
   const now = Date.now()/1000, live = LIVE.has(a.status);
-  const quiet = live && now - a.last_event_at > 90;
+  const quiet = live && now - a.last_event_at > 150;
   const thought = (a.thought || "").replace(/\s+/g, " ").trim();
   return `<div class="agent ${a.status==="failed"?"failed":""}">
     <div class="top"><div class="name" title="${esc(a.label)}">${esc(a.label)}</div><div class="t">${dur((a.ended_at || now) - a.started_at)}</div></div>
@@ -376,7 +376,7 @@ function agentCard(a){
     ${a.last_query && live ? `<div class="q">🔎 “${esc(a.last_query)}”</div>` : ""}
     ${thought && live ? `<div class="th">…${esc(thought.slice(-160))}</div>` : ""}
     ${a.searches || a.sources ? `<div class="m">${a.searches} search${a.searches===1?"":"es"} · ${a.sources} result${a.sources===1?"":"s"} read</div>` : ""}
-    ${quiet ? `<div class="quiet">Quiet for ${dur(now - a.last_event_at)}. Still waiting on Claude.</div>` : ""}
+    ${quiet ? `<div class="quiet">Quiet for ${dur(now - a.last_event_at)}: Claude is still working. It retries automatically after 5 minutes of silence.</div>` : ""}
     ${a.status==="failed" ? `<div class="err">${esc(a.error)}</div>` : ""}
   </div>`;
 }

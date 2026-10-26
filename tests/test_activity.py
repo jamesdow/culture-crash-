@@ -25,3 +25,13 @@ def test_tracker_follows_stream():
     t.on_event(ev("content_block_start", content_block=NS(type="text")))
     t.on_event(ev("content_block_delta", delta=NS(type="text_delta", text="notes")))
     assert t.s.status == "writing" and t.s.out_chars == 5
+
+
+def test_new_step_clears_stale_search_and_thought():
+    t = Tracker(AgentState(id="a1", label="TikTok scout", stage="scan", started_at=0, last_event_at=0))
+    t.status("searching", "Searching tiktok.com")
+    t.s.last_query, t.s.thought = "asking chatgpt before replying", "old thought"
+    t.status("searching")  # same step: keep
+    assert t.s.last_query
+    t.status("thinking", "Turning notes from 68 sources into evidence")
+    assert t.s.last_query == "" and t.s.thought == "" and t.s.searches == 0

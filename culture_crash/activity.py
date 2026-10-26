@@ -48,8 +48,9 @@ class Tracker:
 
     def status(self, status: AgentStatus, step: str | None = None) -> None:
         self.s.status = status
-        if step is not None:
-            self.s.step = step
+        if step is not None and step != self.s.step:
+            # a new step: the previous step's search and thinking would only mislead
+            self.s.step, self.s.last_query, self.s.thought = step, "", ""
         self._touch()
 
     def on_event(self, event) -> None:

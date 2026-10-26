@@ -27,7 +27,7 @@ T = TypeVar("T", bound=BaseModel)
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 WEB_SEARCH_TOOL = "web_search_20260209"
-MAX_PAUSE_RESUMES = 5
+MAX_PAUSE_RESUMES = 2  # each resume allows another round of searches; more rarely adds signal
 # Generous overall, but a stream that goes silent for 5 minutes is treated as dropped.
 STREAM_TIMEOUT = httpx2.Timeout(900.0, connect=30.0, read=300.0)
 FINAL_ANSWER_RULE = (
