@@ -261,3 +261,35 @@ def test_stalled_step_is_retried_without_redoing_searches(tmp_path):
     assert any(s.source.platform == "tiktok" for s in run.signals)
     assert "tiktok" in run.research_cache and "sources_lost" not in run.stats
     assert any("Second try for tiktok" in p.message for p in run.progress)
+
+
+def test_near_misses_are_dived_when_nothing_clears_the_bar(tmp_path):
+    class Lukewarm(FakeLLM):
+        def structured(self, system, prompt, schema, effort=None):
+            out = super().structured(system, prompt, schema, effort)
+            if schema is ScoreResult:
+                out.legible_trend, out.cultural_distance, out.need_intensity = False, 4.5, 5.0
+            return out
+
+    store = RunStore(tmp_path)
+    run = Run(id="20260101-000000-d00d", config=RunConfig(seed=1, shortlist=3, cards_per_space=1))
+    Engine(Lukewarm(), store, routes=fake_routes).run(run)
+    assert run.status == "done", run.error
+    near = [s for s in run.spaces if s.near_miss]
+    assert near and all(s.shortlisted and s.quadrant != "target" and s.collisions for s in near)
+    assert any("Also diving into the closest" in p.message for p in run.progress)
+    assert "Near miss" in render(run)
+
+
+def test_dive_anyway_endpoint(tmp_path):
+    store = RunStore(tmp_path)
+    run = Run(id="20260101-000000-f00d", config=RunConfig(seed=1, shortlist=1, cards_per_space=1, always_show=False))
+    Engine(FakeLLM(), store, routes=fake_routes).run(run)
+    discarded = next(s for s in run.spaces if not s.shortlisted)
+    import culture_crash.server as srv
+
+    app = create_app(str(tmp_path))
+    c = TestClient(app)
+    assert c.post(f"/api/runs/{run.id}/spaces/{discarded.id}/dive").status_code == 200
+    got = store.load(run.id).space(discarded.id)
+    assert got.picked and got.shortlisted

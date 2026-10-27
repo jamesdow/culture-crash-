@@ -128,6 +128,8 @@ class Space(BaseModel):
     scores: Optional[Scores] = None
     quadrant: Optional[Quadrant] = None
     shortlisted: bool = False
+    near_miss: bool = False  # shortlisted although below the bar, so a run never ends with nothing
+    picked: bool = False  # the operator chose to dive into it anyway
     discard_reason: str = ""
     skeleton: str = ""
     banned_obvious: list[str] = []
@@ -148,6 +150,7 @@ class RunConfig(BaseModel):
     max_spaces: int = 8
     shortlist: int = 4
     band: float = 5.5
+    always_show: bool = True  # if too few spaces clear the band, also dive into the closest near misses
     seeds_per_space: int = 4
     cards_per_space: int = 3
     seed: Optional[int] = None

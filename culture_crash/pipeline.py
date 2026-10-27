@@ -30,6 +30,7 @@ from .schemas import ClusterResult, CollisionSet, ConscienceOut, LatentDive, Lat
 from .store import RunStore
 
 MAX_WORKERS = 6
+NEAR_MISS_MAX = 2  # how many below-the-bar spaces to dive into when too few clear it
 POST_BATCH = 20  # posts per extraction call; small batches are fast and fail independently
 PLATFORM_NAMES = {"reddit": "Reddit", "tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube"}
 
@@ -327,11 +328,25 @@ class Engine:
             s.shortlisted = True
         for s in targets[cfg.shortlist :]:
             s.discard_reason = "In the band, but outranked; raise the shortlist size to dive into it."
+        # Never come back empty-handed: if too few clear the bar, also dive into the closest,
+        # clearly marked as near misses (never ones that are already named trends).
+        if cfg.always_show and len(targets) < cfg.shortlist:
+            room = min(NEAR_MISS_MAX, cfg.shortlist - len(targets)) - sum(1 for s in scored if s.near_miss)
+            closest = sorted((s for s in scored if not s.shortlisted and not s.scores.legible_trend),
+                             key=lambda s: s.scores.product, reverse=True)
+            for s in closest[: max(0, room)]:
+                s.shortlisted, s.near_miss = True, True
+                s.discard_reason = ""
+            near = [s for s in scored if s.near_miss]
+            if near:
+                self.store.log(run, "score", ("Nothing" if not targets else f"Only {len(targets)}") + " cleared both bars "
+                               f"({cfg.band:g}+ on each). Also diving into the closest: "
+                               + "; ".join(f"{s.working_name} ({s.scores.cultural_distance:.1f} x {s.scores.need_intensity:.1f})" for s in near) + ".")
         run.spaces.sort(key=lambda s: s.scores.product if s.scores else -1, reverse=True)
-        run.stats["shortlisted"] = len(targets[: cfg.shortlist])
-        if not targets:
-            self.store.log(run, "score", "Nothing cleared both bars. That's an honest result. Try a different focus, a longer window, or a lower band.")
-        else:
+        run.stats["shortlisted"] = sum(1 for s in run.spaces if s.shortlisted)
+        if not any(s.shortlisted for s in run.spaces):
+            self.store.log(run, "score", "Nothing cleared both bars. Try a different focus, a longer window, or a lower band.")
+        elif targets:
             names = "; ".join(s.working_name for s in targets[: cfg.shortlist])
             self.store.log(run, "score", f"Shortlisted: {names}")
 

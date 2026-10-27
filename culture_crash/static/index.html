@@ -42,7 +42,7 @@ input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);b
 .plats .check{margin-top:4px}
 .plat{display:inline-block;font:11px Inter;padding:0 6px;border-radius:4px;background:var(--line);color:var(--ink);margin-right:4px}
 .routes{font-size:12px;color:var(--muted);margin:-4px 0 12px}
-button{font:500 14px Inter;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 12px;cursor:pointer}
+button{white-space:nowrap;font:500 14px Inter;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 12px;cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button:disabled{opacity:.5;cursor:default}
 .btns{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
@@ -276,7 +276,7 @@ function map(run){
   }
   const placed = []; // label boxes already drawn, to nudge overlapping labels apart
   for(const sp of pts){
-    const c = sp.shortlisted ? "var(--accent)" : "var(--muted)";
+    const c = sp.near_miss || sp.picked ? "var(--warn)" : sp.shortlisted ? "var(--accent)" : "var(--muted)";
     const cx = x(sp.scores.cultural_distance), cy = y(sp.scores.need_intensity), w = sp.working_name.length*6.6;
     let lx = cx+10, ly = cy+4;
     if(lx + w > W) lx = cx - 10 - w;
@@ -327,6 +327,8 @@ function space(run, sp){
   const ev = sp.signal_ids.map(id => run.signals.find(s => s.id===id)).filter(Boolean);
   return `<section class="space" id="${esc(sp.id)}">
     <div class="kicker">${esc(sp.working_name)}</div>
+    ${sp.near_miss ? `<div class="banner" style="margin:8px 0">Near miss: this scored below the bar (${sp.scores.cultural_distance.toFixed(1)} × ${sp.scores.need_intensity.toFixed(1)}, needing ${run.config.band} on each). It's shown so the run doesn't come back empty. Judge it with that in mind.</div>` : ""}
+    ${sp.picked ? `<div class="banner" style="margin:8px 0">You chose to dive into this one, overruling its scores.</div>` : ""}
     <div class="need">“${esc(sp.unnamed_need)}”</div>
     ${gate(run, sp)}
     <div class="scores">
@@ -448,15 +450,20 @@ function render(run){
     ${map(run)}
     ${short.length&&pending?`<p class="kicker">${pending} of ${short.length} shortlisted space(s) still need your verdict.</p>`:""}
     ${short.map(sp => space(run, sp)).join("")}
-    ${run.status==="done"&&!short.length?'<p class="empty">Nothing cleared both bars this run. That is an honest result. Try another focus, a longer window or a lower band.</p>':""}
-    ${rest.length?`<h3>Discarded</h3><table><tr><th>Space</th><th>Distance</th><th>Need</th><th>Score</th><th>Why</th></tr>
-      ${rest.map(s=>`<tr><td><b>${esc(s.working_name)}</b><br><span class="skeleton">${esc(s.unnamed_need)}</span></td><td>${s.scores?s.scores.cultural_distance.toFixed(1):"-"}</td><td>${s.scores?s.scores.need_intensity.toFixed(1):"-"}</td><td>${s.scores?s.scores.product.toFixed(0):"-"}</td><td>${esc(s.discard_reason)}</td></tr>`).join("")}</table>`:""}
+    ${run.status==="done"&&!short.length?`<p class="empty">Nothing cleared both bars (${run.config.band} on each). ${rest.filter(s=>s.scores).length?"Closest: "+rest.filter(s=>s.scores).slice(0,3).map(s=>`<b>${esc(s.working_name)}</b> (${s.scores.cultural_distance.toFixed(1)} × ${s.scores.need_intensity.toFixed(1)})`).join(", ")+". Use <b>Dive anyway</b> below on any of them.":""}</p>`:""}
+    ${rest.length?`<h3>Discarded</h3><table><tr><th>Space</th><th>Distance</th><th>Need</th><th>Score</th><th>Why</th><th></th></tr>
+      ${rest.map(s=>`<tr><td><b>${esc(s.working_name)}</b><br><span class="skeleton">${esc(s.unnamed_need)}</span></td><td>${s.scores?s.scores.cultural_distance.toFixed(1):"-"}</td><td>${s.scores?s.scores.need_intensity.toFixed(1):"-"}</td><td>${s.scores?s.scores.product.toFixed(0):"-"}</td><td>${esc(s.discard_reason)}</td><td>${s.scores && !run.demo && run.status!=="running" && run.status!=="queued" ? `<button class="dive" data-space="${esc(s.id)}">Dive anyway</button>` : ""}</td></tr>`).join("")}</table>`:""}
   `;
   document.querySelectorAll(".gate").forEach(g => g.querySelectorAll("button[data-st]").forEach(b => b.onclick = async () => {
     await api(`/api/runs/${run.id}/spaces/${g.dataset.space}/verdict`, {method:"POST", headers:{"content-type":"application/json"},
       body: JSON.stringify({status:b.dataset.st, note:g.querySelector(".note").value, by:g.querySelector(".by").value})});
     openRun(run.id);
   }));
+  document.querySelectorAll("button.dive").forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = "Diving…";
+    await api(`/api/runs/${run.id}/spaces/${b.dataset.space}/dive`, {method:"POST"});
+    openRun(run.id);
+  });
   const rb = $("#resume");
   if(rb) rb.onclick = async () => { rb.disabled = true; await api(`/api/runs/${run.id}/resume`, {method:"POST"}); openRun(run.id); };
   const sh = $("#shuffle");

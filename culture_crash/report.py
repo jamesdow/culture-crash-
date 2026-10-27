@@ -64,6 +64,10 @@ def render_trail(run: Run, sp: Space) -> str:
 def render_space(run: Run, sp: Space) -> str:
     sc = sp.scores
     out = [f"## {sp.working_name}", ""]
+    if sp.near_miss and sp.scores:
+        out += [f"> **Near miss:** scored below the bar ({sp.scores.cultural_distance:.1f} x {sp.scores.need_intensity:.1f}, needing {run.config.band:g} on each). Included so the run isn't empty.", ""]
+    if sp.picked:
+        out += ["> **Picked by the operator,** overruling its scores.", ""]
     out.append(f"> **Unnamed need:** {sp.unnamed_need}")
     out.append("")
     out.append(f"**Conscience verdict:** {VERDICT_LABEL[sp.verdict.status]}"

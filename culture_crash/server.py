@@ -85,6 +85,21 @@ def create_app(runs_dir: str = "runs") -> FastAPI:
         launch(run)
         return {"id": run.id}
 
+    @app.post("/api/runs/{run_id}/spaces/{space_id}/dive")
+    def dive_anyway(run_id: str, space_id: str):
+        """The operator overrules the scores: dive and collide on a discarded space."""
+        if run_id in live:
+            raise HTTPException(409, "run still in progress")
+        run = get(run_id)
+        sp = run.space(space_id)
+        if run.demo or sp is None or sp.scores is None:
+            raise HTTPException(409, "can't dive into this space")
+        sp.shortlisted, sp.picked, sp.discard_reason = True, True, ""
+        run.status = "queued"
+        store.save(run)
+        launch(run)
+        return {"id": run.id}
+
     @app.post("/api/demo")
     def demo():
         from .demo import build_demo_run
