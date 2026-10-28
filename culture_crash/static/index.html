@@ -105,6 +105,22 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
 th{color:var(--muted);font-weight:500}
 .cons dt{font-weight:600;margin-top:8px}
 .cons dd{margin:2px 0 0}
+/* ideas */
+.idea .oblique .ttl{font:600 12px Inter;letter-spacing:.06em;text-transform:uppercase;opacity:.75;margin-bottom:8px}
+.axes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.pill{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.pill.w1{border-color:var(--good);color:var(--good)} .pill.w2{border-color:var(--warn);color:var(--warn)} .pill.w3{border-color:var(--accent);color:var(--accent)}
+ul.quotes{list-style:none;padding:0;margin:0} ul.quotes li{font:400 17px/1.4 Fraunces,serif;margin:0 0 10px} ul.quotes .m{font:12px Inter}
+.m{color:var(--muted);font-size:12px}
+.maphead{display:flex;gap:10px;align-items:baseline;margin-bottom:4px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin:6px 0}
+.lg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.sliders{display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:13px;margin-top:6px}
+.sliders input{width:110px;vertical-align:middle}
+.territory{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0}
+.tchips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 6px}
+.tchip{font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid var(--accent);color:var(--accent);cursor:help}
+.tchip.core{background:var(--accent);color:#fff}
 /* live activity */
 .activity{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:0 0 16px}
 .activity .head{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin-bottom:12px}
@@ -292,23 +308,37 @@ function map(run){
   return `<div class="mapwrap">${s}</svg></div>`;
 }
 
+const BRAND = run => (run.config.brand || "brand").toUpperCase();
+const wLabel = w => w < 4 ? "close to home" : w < 7 ? "a stretch" : "out there";
+
 function card(c, run, sp){
   const lc = sp.latent.find(l => l.name === c.latent_name);
   const ev = c.signal_ids.map(id => run.signals.find(s => s.id===id)).filter(Boolean);
-  return `<div class="card">
-    <div class="oblique"><p>${esc(c.oblique_strategy)}</p><small>${esc(c.latent_name)}${lc?" · "+esc(lc.domain):""}</small></div>
+  const fit = c.brand_fit ?? c.coherence, w = c.surprise;
+  const dig = (c.dig_deeper||[]).map(d => d.replace(/^(search|read|key text|open question)\s*:\s*/i, ""));
+  return `<div class="card idea" id="card-${esc(c.id)}" data-w="${w}" data-f="${fit}">
+    <div class="oblique">
+      ${c.title ? `<div class="ttl">${esc(c.title)}</div>` : ""}
+      <p>${esc(c.oblique_strategy)}</p>
+      <small>${c.latent_name ? "Borrowed: " + esc(c.latent_name) : "Straight from the evidence"}</small>
+    </div>
     <div class="body">
-      <div class="mf">mad factor <div class="bar"><i style="width:${c.mad_factor*10}%"></i></div> ${c.mad_factor.toFixed(1)}</div>
+      <div class="axes"><span class="pill w${w<4?1:w<7?2:3}">${wLabel(w)} · ${w}/10</span><span class="pill">${esc(BRAND(run))} fit ${fit}/10</span></div>
       <p>${esc(c.mad_thought)}</p>
       <dl>
-        <dt>Language for it</dt><dd>${c.coinage.map(w=>`<span class="coin">${esc(w)}</span>`).join("")}<br>${esc(c.coinage_gloss)}</dd>
-        <dt>Bridge</dt><dd>${esc(c.bridge)}</dd>
-        <dt>Value exchange</dt><dd>${esc(c.value_exchange)}</dd>
+        ${c.borrowed_from ? `<dt>Borrowed from</dt><dd>${esc(c.borrowed_from)} ${lc && lc.source ? link(lc.source) : ""}</dd>` : ""}
+        ${c.bridge ? `<dt>Why it fits</dt><dd>${esc(c.bridge)}</dd>` : ""}
+        <dt>For ${esc(BRAND(run))}</dt><dd>${esc(c.value_exchange)}</dd>
+        ${c.coinage.length ? `<dt>Words for it</dt><dd>${c.coinage.map(x=>`<span class="coin">${esc(x)}</span>`).join("")}${c.coinage_gloss?`<br>${esc(c.coinage_gloss)}`:""}</dd>` : ""}
+        ${c.cannes_echo ? `<dt>Cannes echo</dt><dd>${esc(c.cannes_echo)}</dd>` : ""}
         <dt>Risk</dt><dd>${esc(c.risk_note)}</dd>
-        ${(c.dig_deeper||[]).length ? `<dt>Dig deeper</dt><dd><ul class="dig">${c.dig_deeper.map(d => `<li>${searchLink(d)}</li>`).join("")}</ul></dd>` : ""}
-        <dt>Citations</dt><dd>Far concept: ${lc?link(lc.source):"-"}<br>Tension: ${ev.map(s=>`${plat(s.source.platform)} ${link(s.source)}`).join("<br>")}</dd>
       </dl>
-    </div></div>`;
+      <details><summary>Dig deeper and sources</summary>
+        ${dig.length ? `<ul class="dig">${dig.map(d => `<li>${searchLink(d)}</li>`).join("")}</ul>` : ""}
+        <div class="m" style="margin-top:6px">${ev.map(s=>`${plat(s.source.platform)} ${link(s.source)}`).join("<br>")}</div>
+      </details>
+    </div>
+  </div>`;
 }
 
 function gate(run, sp){
@@ -325,34 +355,104 @@ function gate(run, sp){
 function space(run, sp){
   const sc = sp.scores, cb = sp.conscience;
   const ev = sp.signal_ids.map(id => run.signals.find(s => s.id===id)).filter(Boolean);
+  const quotes = ev.filter(s => s.verbatim).sort((a,b) => b.emotional_weight - a.emotional_weight).slice(0,3);
   return `<section class="space" id="${esc(sp.id)}">
-    <div class="kicker">${esc(sp.working_name)}</div>
-    ${sp.near_miss ? `<div class="banner" style="margin:8px 0">Near miss: this scored below the bar (${sp.scores.cultural_distance.toFixed(1)} × ${sp.scores.need_intensity.toFixed(1)}, needing ${run.config.band} on each). It's shown so the run doesn't come back empty. Judge it with that in mind.</div>` : ""}
-    ${sp.picked ? `<div class="banner" style="margin:8px 0">You chose to dive into this one, overruling its scores.</div>` : ""}
+    <div class="kicker">${esc(sp.working_name)}${run.config.brand ? ` · ${esc(sp.territory || "outside the territories")} · ${esc(BRAND(run))} fit ${sp.brand_fit}/10` : ""}</div>
     <div class="need">“${esc(sp.unnamed_need)}”</div>
-    ${gate(run, sp)}
-    <div class="scores">
-      <div><b>${sc.cultural_distance.toFixed(1)}</b>cultural distance</div>
-      <div><b>${sc.need_intensity.toFixed(1)}</b>need intensity</div>
-      <div><b>${sc.product.toFixed(0)}</b>product / 100</div>
-      <div><b>${sc.need_model.toFixed(1)} / ${sc.need_features.toFixed(1)}</b>need: model / evidence</div>
-    </div>
+    ${sp.near_miss ? `<div class="banner" style="margin:8px 0">Near miss: scored below the bar (${sc.cultural_distance.toFixed(1)} × ${sc.need_intensity.toFixed(1)}). Shown so you have something to judge.</div>` : ""}
+    ${sp.picked ? `<div class="banner" style="margin:8px 0">You chose to dive into this one, overruling its scores.</div>` : ""}
+    ${run.config.brand && sp.right_to_play ? `<p><b>Why ${esc(BRAND(run))} can speak to it:</b> ${esc(sp.right_to_play)}</p>` : ""}
     <div class="pulls"><div>${esc(sp.pull_a)}</div><div class="x">×</div><div>${esc(sp.pull_b)}</div></div>
-    ${sp.skeleton?`<p class="skeleton">Skeleton: ${esc(sp.skeleton)}</p>`:""}
-    ${sp.collisions.length?`<h3>Collisions</h3><div class="cards">${sp.collisions.map(c=>card(c,run,sp)).join("")}</div>`:`<p class="empty">No collision cards for this space.</p>`}
-    <h3>The cultural gap</h3>
-    <p>${esc(sc.distance_rationale)}</p><p class="skeleton">${esc(sp.why_unnamed)}</p>
-    ${sc.existing_names.length?`<ul class="ev">${sc.existing_names.map(n=>`<li><b>${esc(n.term)}</b>: ${esc(n.closeness)} ${link(n.source)}</li>`).join("")}</ul>`:""}
-    <h3>Evidence</h3>
-    <ul class="ev">${ev.map(s=>`<li>${plat(s.source.platform)}<span class="k">${esc(s.id)} · ${esc(s.kind)} · w${s.emotional_weight}</span> ${esc(s.observation)} ${s.verbatim?`<span class="q">“${esc(s.verbatim)}”</span>`:""} ${link(s.source)}</li>`).join("")}</ul>
-    ${cb?`<h3>Conscience brief (for you to weigh, not a verdict)</h3><dl class="cons">
+    <p><b>Why nobody's named it:</b> ${esc(sp.why_unnamed)}</p>
+    ${quotes.length ? `<h3>In their words</h3><ul class="quotes">${quotes.map(q => `<li>“${esc(q.verbatim)}” <span class="m">${plat(q.source.platform)} ${link(q.source)}</span></li>`).join("")}</ul>` : ""}
+    ${sp.collisions.length ? `<h3>Ideas, close to home → out there (${sp.collisions.length})</h3><div class="cards">${sp.collisions.map(c=>card(c,run,sp)).join("")}</div>` : `<p class="empty">No ideas for this one yet.</p>`}
+    ${gate(run, sp)}
+    ${cb ? `<details><summary>Gives or takes? The brief to help you judge</summary><dl class="cons">
       <dt>Gives</dt><dd>${esc(cb.gives)}</dd><dt>Takes</dt><dd>${esc(cb.takes)}</dd>
-      <dt>Who is vulnerable</dt><dd>${esc(cb.who_is_vulnerable)}</dd>
-      <dt>Exploitation vectors</dt><dd>${cb.exploitation_vectors.map(esc).join("; ")}</dd>
-      <dt>Honest version</dt><dd>${esc(cb.honest_version)}</dd>
-      <dt>Questions for you</dt><dd><ul class="ev">${cb.questions_for_operator.map(q=>`<li>${esc(q)}</li>`).join("")}</ul></dd></dl>`:""}
-    ${trail(run, sp)}
+      <dt>Who's exposed</dt><dd>${esc(cb.who_is_vulnerable)}</dd>
+      <dt>How a brand could get it wrong</dt><dd>${cb.exploitation_vectors.map(esc).join("; ")}</dd>
+      <dt>The honest version</dt><dd>${esc(cb.honest_version)}</dd>
+      <dt>Ask yourself</dt><dd><ul class="ev">${cb.questions_for_operator.map(q=>`<li>${esc(q)}</li>`).join("")}</ul></dd></dl></details>` : ""}
+    <details><summary>The workings: scores, all evidence, how we got here</summary>
+      <div class="scores" style="margin-top:10px">
+        <div><b>${sc.cultural_distance.toFixed(1)}</b>unnamed-ness</div>
+        <div><b>${sc.need_intensity.toFixed(1)}</b>need</div>
+        <div><b>${sc.product.toFixed(0)}</b>score / 100</div>
+      </div>
+      <p>${esc(sc.distance_rationale)}</p><p>${esc(sc.need_rationale)}</p>
+      ${sc.existing_names.length?`<p><b>Closest existing names</b></p><ul class="ev">${sc.existing_names.map(n=>`<li><strong>${esc(n.term)}</strong>: ${esc(n.closeness)} ${link(n.source)}</li>`).join("")}</ul>`:""}
+      <p><b>All evidence</b></p>
+      <ul class="ev">${ev.map(s=>`<li>${plat(s.source.platform)}<span class="k">${esc(s.kind.replace("_"," "))}</span> ${esc(s.observation)} ${s.verbatim?`<span class="q">“${esc(s.verbatim)}”</span>`:""} ${link(s.source)}</li>`).join("")}</ul>
+      ${trail(run, sp)}
+    </details>
   </section>`;
+}
+
+// ---- idea map: weirdness (x) against brand fit (y), with sliders that filter the cards
+const PALETTE = ["#d1401f","#2f6fd1","#2f7a4a","#a8329c","#b07a14","#1f8a8a","#6b4fd1","#8a5a2b"];
+let filt = {wMin:0, wMax:10, fMin:0};
+try { Object.assign(filt, JSON.parse(localStorage.getItem("cc-filter") || "{}")); } catch(e) {}
+
+function ideaMap(run){
+  const short = run.spaces.filter(s => s.shortlisted && s.collisions.length);
+  const ideas = short.flatMap((sp, i) => sp.collisions.map(c => ({c, sp, col: PALETTE[i % PALETTE.length]})));
+  if(!ideas.length) return "";
+  const W=680, H=380, P=46, x = v => P + v/10*(W-P*1.6), y = v => H-P - v/10*(H-P*1.7);
+  const jit = id => { let h=0; for(const ch of id) h = (h*31 + ch.charCodeAt(0)) % 997; return (h/997 - .5) * 0.5; };
+  let g = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Ideas plotted by how out there they are and how on-brand">
+    <line x1="${x(0)}" y1="${y(0)}" x2="${x(10)}" y2="${y(0)}" stroke="var(--line)"/><line x1="${x(0)}" y1="${y(0)}" x2="${x(0)}" y2="${y(10)}" stroke="var(--line)"/>
+    <line x1="${x(5)}" y1="${y(0)}" x2="${x(5)}" y2="${y(10)}" stroke="var(--line)" stroke-dasharray="3 4"/><line x1="${x(0)}" y1="${y(5)}" x2="${x(10)}" y2="${y(5)}" stroke="var(--line)" stroke-dasharray="3 4"/>
+    <text x="${x(0)+6}" y="${y(10)+14}" font-size="11" fill="var(--muted)">on-brand, usable now</text>
+    <text x="${x(10)-6}" y="${y(10)+14}" font-size="11" fill="var(--muted)" text-anchor="end">on-brand and out there</text>
+    <text x="${x(0)+6}" y="${y(0)-8}" font-size="11" fill="var(--muted)">safe and generic</text>
+    <text x="${x(10)-6}" y="${y(0)-8}" font-size="11" fill="var(--muted)" text-anchor="end">wild cards</text>
+    <text x="${(x(0)+x(10))/2}" y="${H-12}" text-anchor="middle" font-size="12" fill="var(--muted)">← less out there · more out there →</text>
+    <text transform="translate(14 ${(y(0)+y(10))/2}) rotate(-90)" text-anchor="middle" font-size="12" fill="var(--muted)">${run.config.brand ? "← less on-brand · more on-brand →" : "← weaker fit · stronger fit →"}</text>`;
+  for(const {c, sp, col} of ideas){
+    const w = c.surprise, f = c.brand_fit ?? c.coherence;
+    g += `<circle class="dot" data-w="${w}" data-f="${f}" cx="${x(Math.min(10, Math.max(0, w + jit(c.id))))}" cy="${y(Math.min(10, Math.max(0, f + jit(c.id+"y"))))}" r="7" fill="${col}" fill-opacity=".85" stroke="var(--panel)" style="cursor:pointer"
+      onclick="document.getElementById('card-${esc(c.id)}')?.scrollIntoView({behavior:'smooth', block:'center'})"><title>${esc(c.title || c.oblique_strategy)} · ${esc(sp.working_name)}</title></circle>`;
+  }
+  const legend = short.map((sp, i) => `<span class="lg"><i style="background:${PALETTE[i % PALETTE.length]}"></i>${esc(sp.working_name)}</span>`).join("");
+  return `<div class="mapwrap" id="ideamap"><div class="maphead"><b>${ideas.length} ideas</b> <span class="m">click a dot to jump to its card</span></div>
+    ${g}</svg><div class="legend">${legend}</div>
+    <div class="sliders">
+      <label>Out there, from <input type="range" min="0" max="10" step="1" id="wMin" value="${filt.wMin}"> <output id="wMinO">${filt.wMin}</output></label>
+      <label>to <input type="range" min="0" max="10" step="1" id="wMax" value="${filt.wMax}"> <output id="wMaxO">${filt.wMax}</output></label>
+      <label>${run.config.brand ? "On-brand" : "Fit"}, at least <input type="range" min="0" max="10" step="1" id="fMin" value="${filt.fMin}"> <output id="fMinO">${filt.fMin}</output></label>
+      <span class="m" id="shownCount"></span>
+    </div></div>`;
+}
+
+function applyFilter(){
+  let shown = 0, total = 0;
+  document.querySelectorAll(".card.idea, circle.dot").forEach(el => {
+    const ok = +el.dataset.w >= filt.wMin && +el.dataset.w <= filt.wMax && +el.dataset.f >= filt.fMin;
+    if(el.tagName === "circle") el.style.opacity = ok ? 1 : .12;
+    else { el.style.display = ok ? "" : "none"; total++; if(ok) shown++; }
+  });
+  const n = $("#shownCount"); if(n) n.textContent = `showing ${shown} of ${total}`;
+}
+
+function bindFilter(){
+  for(const k of ["wMin","wMax","fMin"]){
+    const el = document.getElementById(k); if(!el) continue;
+    el.oninput = () => {
+      filt[k] = +el.value; if(filt.wMin > filt.wMax){ if(k==="wMin") filt.wMax = filt.wMin; else filt.wMin = filt.wMax; }
+      for(const j of ["wMin","wMax","fMin"]){ const e = document.getElementById(j); if(e){ e.value = filt[j]; document.getElementById(j+"O").textContent = filt[j]; } }
+      try { localStorage.setItem("cc-filter", JSON.stringify(filt)); } catch(e) {}
+      applyFilter();
+    };
+  }
+  applyFilter();
+}
+
+function territoryPanel(run){
+  const t = run.territory; if(!t) return "";
+  const chip = (x) => `<span class="tchip ${x.core?"core":""}" title="${esc(x.why)}">${esc(x.name)}</span>`;
+  return `<div class="territory"><b>Where ${esc(BRAND(run))} can play</b> <span class="m">${esc(t.summary)}</span>
+    <div class="tchips">${t.territories.filter(x=>x.core).map(chip).join("")}${t.territories.filter(x=>!x.core).map(chip).join("")}</div>
+    <div class="m">Filled chips are core, where most of the hunting went. Outlined ones are adjacent.</div></div>`;
 }
 
 const STAGES = [["scan","Listen"],["cluster","Cluster"],["score","Score"],["latent","Dive & collide"],["done","Your verdict"]];
@@ -447,7 +547,9 @@ function render(run){
     ${Object.keys(run.routes||{}).length?`<div class="routes">Reached via: ${Object.entries(run.routes).map(([k,v])=>`<b>${esc(k)}</b> ${esc(v)}`).join(" · ")}</div>`:""}
     ${activity(run)}
     ${run.progress.length?`<details><summary>Progress · ${esc(run.status)} · ${esc(run.stage)}</summary><div class="log">${run.progress.map(p=>`<div>${esc(p.at.slice(11))} <b>[${esc(p.stage)}]</b> ${esc(p.message)}</div>`).join("")}</div></details>`:""}
-    ${map(run)}
+    ${territoryPanel(run)}
+    ${ideaMap(run)}
+    ${run.spaces.some(s=>s.scores) ? `<details style="margin:0 0 12px"><summary>How the tensions scored (unnamed-ness × need)</summary>${map(run)}</details>` : ""}
     ${short.length&&pending?`<p class="kicker">${pending} of ${short.length} shortlisted space(s) still need your verdict.</p>`:""}
     ${short.map(sp => space(run, sp)).join("")}
     ${run.status==="done"&&!short.length?`<p class="empty">Nothing cleared both bars (${run.config.band} on each). ${rest.filter(s=>s.scores).length?"Closest: "+rest.filter(s=>s.scores).slice(0,3).map(s=>`<b>${esc(s.working_name)}</b> (${s.scores.cultural_distance.toFixed(1)} × ${s.scores.need_intensity.toFixed(1)})`).join(", ")+". Use <b>Dive anyway</b> below on any of them.":""}</p>`:""}
@@ -459,6 +561,7 @@ function render(run){
       body: JSON.stringify({status:b.dataset.st, note:g.querySelector(".note").value, by:g.querySelector(".by").value})});
     openRun(run.id);
   }));
+  bindFilter();
   document.querySelectorAll("button.dive").forEach(b => b.onclick = async () => {
     b.disabled = true; b.textContent = "Diving…";
     await api(`/api/runs/${run.id}/spaces/${b.dataset.space}/dive`, {method:"POST"});

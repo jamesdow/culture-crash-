@@ -100,6 +100,14 @@ Runs are saved as JSON (with a markdown report) in `./runs/`.
 
 **Model and cost.** The default model is `claude-opus-5-5` at `high` effort, with server-side refusal fallback switched on. A full run with all five sources makes roughly 35–50 API calls, about a third of them with web search. Expect a few dollars per run, more at `xhigh`/`max` or with a larger shortlist. This is an estimate, so measure your first runs.
 
+## What you get back
+
+- **Where the brand can play.** With a brand set, the engine first maps its territories: core ones (where about 70% of the hunting goes, set by `brand_core_share`) and adjacent ones. Each scout is pointed at one of them.
+- **Five to eight tensions,** each with: what people feel in their own words, why nobody's named it, and why the brand can speak to it (with a 0-10 brand fit). One or two strong tensions from outside the territory are kept on purpose.
+- **Lots of ideas per tension** (10 by default), deliberately spread from close to home to out there. Each has a title, a provocation, the thought, what it's borrowed from (in one plain sentence), why it fits, what the brand could do, words for the feeling, a risk, and a Cannes echo when it genuinely resembles a winner.
+- **The idea map** plots every idea by how out there it is (left to right) against how on-brand it is (bottom to top). Sliders filter the map and the cards together.
+- **Plain English throughout.** The workings (scores, all evidence, the borrowed-idea trail) sit in a collapsed "workings" section in the app and an appendix in the report.
+
 ## Where to tune it
 
 | File | What it controls |

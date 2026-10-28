@@ -226,9 +226,37 @@ def build_demo_run(run_id: str) -> Run:
         "space-3-c1": ["hermit crab vacancy chain research", "adults learning basic skills secretly", "r/NoStupidQuestions embarrassing adult basics", "Open question: does the chain break if anyone is watched?"],
         "space-3-c2": ["coppicing rotation woodland", "learning to swim as an adult"],
     }
+    titles = {
+        "space-1-c1": "The standing table", "space-1-c2": "The catch-up amnesty", "space-1-c3": "Friendship by rota",
+        "space-2-c1": "Sell the gap", "space-2-c2": "Plans that set slowly",
+        "space-3-c1": "Learn from one step ahead", "space-3-c2": "Late shoots, deep roots",
+    }
+    borrowed = {
+        "Hefting": "Hill farmers' sheep learn where home is and stay there without fences, and the lambs learn it from their mothers.",
+        "Shmita": "In Jewish tradition, every seventh year the fields rest and many debts are simply cancelled.",
+        "Change ringing": "Church bell-ringers don't play tunes; they ring set patterns, and the music comes from the pattern.",
+        "Expansion joint": "Bridges have deliberate gaps built in so they can stretch in the heat without cracking.",
+        "Annealing": "Metalworkers heat metal and cool it slowly so it stops being brittle.",
+        "Vacancy chain": "When a bigger shell turns up, hermit crabs queue by size and each moves into the one the next crab left.",
+        "Coppicing": "Foresters cut trees back to the stump and they regrow fast, because the roots are already there.",
+    }
+    plain_fit = {
+        "space-1-c1": "The reminder is the fence. Friendships that last are held by a place and a habit, the way the flock is held by the hill.",
+        "space-1-c2": "Owed catch-ups pile up like debt until it's easier to let the friendship go. Cancelling the debt makes it easy to start again.",
+        "space-1-c3": "An agreed rotation of who hosts does the work that willpower can't.",
+        "space-2-c1": "The plan isn't the problem. It's the plan pressing on everything around it. A deliberate gap takes the strain.",
+        "space-2-c2": "Plans that arrive too fast feel brittle. Ones that firm up gradually don't hang over you.",
+        "space-3-c1": "The best teacher for an embarrassing basic is someone who only just learned it, not an expert.",
+        "space-3-c2": "Starting over as an adult isn't starting from nothing. The rest of you is already grown.",
+    }
     for sp in (friends, pre, basics):
         for c in sp.collisions:
             c.dig_deeper = dig.get(c.id, [])
+            c.title = titles.get(c.id, "")
+            c.borrowed_from = borrowed.get(c.latent_name, "")
+            c.brand_fit = c.coherence
+            c.bridge = plain_fit.get(c.id, c.bridge)
+        sp.collisions.sort(key=lambda c: c.surprise)
     from .activity import AgentState
     t0 = 1_760_000_000.0
     trail = [

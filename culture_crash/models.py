@@ -85,6 +85,10 @@ class LatentConcept(BaseModel):
 
 class Collision(BaseModel):
     id: str
+    title: str = ""
+    borrowed_from: str = ""  # the borrowed concept explained in one plain sentence
+    brand_fit: float = 5.0
+    cannes_echo: str = ""
     latent_name: str
     oblique_strategy: str
     mad_thought: str
@@ -118,6 +122,9 @@ class Verdict(BaseModel):
 
 class Space(BaseModel):
     id: str
+    territory: str = ""
+    brand_fit: float = 5.0
+    right_to_play: str = ""
     working_name: str
     unnamed_need: str
     pull_a: str
@@ -152,10 +159,34 @@ class RunConfig(BaseModel):
     band: float = 5.5
     always_show: bool = True  # if too few spaces clear the band, also dive into the closest near misses
     seeds_per_space: int = 4
-    cards_per_space: int = 3
+    cards_per_space: int = 10  # ideas kept per space; the strategist prefers more ideas to fewer
+    brand_core_share: float = 0.7  # share of scouting aimed at the brand's core territories
     seed: Optional[int] = None
     model: str = "claude-opus-5-5"
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+
+
+class Territory(BaseModel):
+    name: str
+    why: str
+    search_terms: list[str] = []
+    core: bool = True
+
+
+class BrandTerritory(BaseModel):
+    brand: str
+    summary: str
+    territories: list[Territory] = []
+    already_says: list[str] = []
+    subreddits: list[str] = []
+
+    def block(self) -> str:
+        lines = [f"Brand: {self.brand}. {self.summary}"]
+        for t in self.territories:
+            lines.append(f"- {'CORE' if t.core else 'ADJACENT'}: {t.name}. {t.why}")
+        if self.already_says:
+            lines.append("Already says (avoid repeating): " + "; ".join(self.already_says))
+        return "\n".join(lines)
 
 
 class CachedResearch(BaseModel):
@@ -186,6 +217,7 @@ class Run(BaseModel):
     routes: dict[str, str] = {}  # platform -> how it was reached this run
     agents: list[AgentState] = []  # live view of each unit of work, for the progress panel
     research_cache: dict[str, CachedResearch] = {}
+    territory: Optional[BrandTerritory] = None
     error: Optional[str] = None
 
     def signal(self, sid: str) -> Optional[Signal]:

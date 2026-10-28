@@ -12,7 +12,8 @@ from culture_crash.harvest import Post, Unavailable
 from culture_crash.report import render
 from culture_crash.schemas import (
     ClusterResult, ClusterSpace, CollisionCard, CollisionSet, ConscienceOut, ExistingName, ExtractedSignal,
-    LatentCandidate, LatentCheck, LatentDive, LatentVerification, ScoreResult, SignalExtraction,
+    BrandTerritoryOut, LatentCandidate, LatentCheck, LatentDive, LatentVerification, ScoreResult, SignalExtraction,
+    TerritoryOut,
 )
 from culture_crash.server import create_app
 from culture_crash.store import RunStore
@@ -43,9 +44,10 @@ class FakeLLM:
         if schema is ClusterResult:
             return ClusterResult(spaces=[
                 ClusterSpace(working_name="Hot space", unnamed_need="need", pull_a="a", pull_b="b", why_unnamed="w",
-                             nearest_named=[], signal_ids=["sig-01", "sig-02", "sig-404"]),
+                             nearest_named=[], signal_ids=["sig-01", "sig-02", "sig-404"],
+                             territory="Long runs", brand_fit=8, right_to_play="It's where the brand lives."),
                 ClusterSpace(working_name="Named already", unnamed_need="need2", pull_a="a", pull_b="b", why_unnamed="w",
-                             nearest_named=["x"], signal_ids=["sig-01"]),
+                             nearest_named=["x"], signal_ids=["sig-01"], territory="outside", brand_fit=2, right_to_play="weak"),
             ])
         if schema is ScoreResult:
             named = "Named already" in prompt
@@ -66,14 +68,21 @@ class FakeLLM:
                 LatentCheck(name="Wild", verified=False, source_ref="S2", corrected_mechanism="", note="not real"),
             ])
         if schema is CollisionSet:
+            def card(title, concept, weird, fit, sig_ids, dig):
+                return CollisionCard(title=title, provocation=f"{title}.", thought="t", concept_name=concept,
+                                     borrowed_from="b" if concept else "", why_it_fits="w", words_for_it=["hefted"],
+                                     words_gloss="g", for_brand="v", risk="r", weirdness=weird, brand_fit=fit,
+                                     cannes_echo="", signal_ids=sig_ids, dig_deeper=dig)
             return CollisionSet(cards=[
-                CollisionCard(latent_name="Hefting", oblique_strategy="Graze the same hill.", mad_thought="m", bridge="b",
-                              coinage=["hefted"], coinage_gloss="g", value_exchange="v", risk_note="r",
-                              surprise=8, coherence=9, signal_ids=["sig-01", "sig-77"], dig_deeper=["search: hefted flocks"]),
-                CollisionCard(latent_name="Hefting", oblique_strategy="Weak card.", mad_thought="m", bridge="b",
-                              coinage=[], coinage_gloss="", value_exchange="v", risk_note="r",
-                              surprise=10, coherence=1, signal_ids=[], dig_deeper=[]),
+                card("Graze the same hill", "Hefting", 8, 9, ["sig-01", "sig-77"], ["search: hefted flocks"]),
+                card("Straight from the evidence", "", 2, 6, [], []),
+                card("Unverified borrow", "Made Up", 5, 4, [], []),
             ])
+        if schema is BrandTerritoryOut:
+            return BrandTerritoryOut(summary="A running brand.", already_says=["fly"], subreddits=["running", "r/trailrunning"],
+                                     core=[TerritoryOut(name="Long runs", why="w", search_terms=["long run"]),
+                                           TerritoryOut(name="First year of running", why="w", search_terms=["new runner"])],
+                                     adjacent=[TerritoryOut(name="On your feet all day", why="w", search_terms=["nurse shoes"])])
         if schema is ConscienceOut:
             return ConscienceOut(gives="g", takes="t", who_is_vulnerable="w", exploitation_vectors=["e"],
                                  honest_version="h", questions_for_operator=["q"])
@@ -111,7 +120,7 @@ def fake_routes(platform):
 def test_full_pipeline(tmp_path):
     store = RunStore(tmp_path)
     llm = FakeLLM()
-    run = Run(id="20260101-000000-abcd", config=RunConfig(seed=1, shortlist=2, cards_per_space=1))
+    run = Run(id="20260101-000000-abcd", config=RunConfig(seed=1, shortlist=2))
     Engine(llm, store, routes=fake_routes).run(run)
 
     assert run.status == "done", run.error
@@ -130,9 +139,10 @@ def test_full_pipeline(tmp_path):
     assert "Obvious Thing" not in names
     assert names["Hefting"].verified and names["Hefting"].mechanism == "fixed"
     assert not names["Made Up"].verified and not names["Wild"].verified
-    # Cards ranked by mad factor (product), invalid signal ids filtered.
-    assert [c.oblique_strategy for c in hot.collisions] == ["Graze the same hill."]
-    assert hot.collisions[0].signal_ids == ["sig-01"]
+    # All ideas kept, ordered close-to-home first; unverified concepts never claimed; bad ids filtered.
+    assert [c.title for c in hot.collisions] == ["Straight from the evidence", "Unverified borrow", "Graze the same hill"]
+    assert hot.collisions[1].latent_name == "" and hot.collisions[1].borrowed_from == ""
+    assert hot.collisions[2].latent_name == "Hefting" and hot.collisions[2].signal_ids == ["sig-01"]
     # The engine never sets a verdict.
     assert all(s.verdict.status == "pending" for s in run.spaces)
     # Each platform records how it was reached; blocked ones fall back to domain-restricted search.
@@ -146,12 +156,12 @@ def test_full_pipeline(tmp_path):
     assert run.stats["signals_tiktok"] >= 1
 
     md = render(run)
-    assert "Graze the same hill." in md and "PENDING" in md
+    assert "Graze the same hill" in md and "PENDING" in md
     brief = render(run, brief_only=True)
-    assert "Graze the same hill." not in brief
+    assert "Graze the same hill" not in brief
 
     store.set_verdict(run.id, hot.id, "gives", "it gives permission", "tester")
-    assert "Graze the same hill." in render(store.load(run.id), brief_only=True)
+    assert "Graze the same hill" in render(store.load(run.id), brief_only=True)
 
 
 def test_scoring_product_needs_both_bars():
@@ -205,14 +215,14 @@ def test_resume_continues_after_failure(tmp_path):
 
 def test_agents_are_recorded(tmp_path):
     store = RunStore(tmp_path)
-    run = Run(id="20260101-000000-cafe", config=RunConfig(seed=1, shortlist=1, cards_per_space=1))
+    run = Run(id="20260101-000000-cafe", config=RunConfig(seed=1, shortlist=1))
     Engine(FakeLLM(), store, routes=fake_routes).run(run)
     labels = [a.label for a in run.agents]
     assert "Clusterer" in labels and "TikTok scout" in labels and any(l.startswith("Diver · ") for l in labels)
     assert all(a.status == "done" and a.ended_at for a in run.agents)
     hot = next(s for s in run.spaces if s.shortlisted)
     assert any(a.space_id == hot.id and a.stage == "latent" for a in run.agents)
-    assert hot.collisions[0].dig_deeper == ["search: hefted flocks"]
+    assert next(c for c in hot.collisions if c.latent_name == "Hefting").dig_deeper == ["search: hefted flocks"]
 
 
 def test_posts_are_read_in_batches_and_one_slow_batch_is_survivable(tmp_path, monkeypatch):
@@ -293,3 +303,34 @@ def test_dive_anyway_endpoint(tmp_path):
     assert c.post(f"/api/runs/{run.id}/spaces/{discarded.id}/dive").status_code == 200
     got = store.load(run.id).space(discarded.id)
     assert got.picked and got.shortlisted
+
+
+def test_brand_territory_steers_the_scouts(tmp_path):
+    class Watching(FakeLLM):
+        prompts: list[str] = []
+
+        def research(self, system, prompt, max_searches=6, allowed_domains=None):
+            self.prompts.append(prompt)
+            return super().research(system, prompt, max_searches, allowed_domains)
+
+    llm = Watching()
+    store = RunStore(tmp_path)
+    run = Run(id="20260101-000000-b4a4", config=RunConfig(seed=3, brand="hoka", shortlist=1))
+    Engine(llm, store, routes=fake_routes).run(run)
+    assert run.status == "done", run.error
+    assert run.territory and [t.name for t in run.territory.territories if t.core] == ["Long runs", "First year of running"]
+    assert run.territory.subreddits == ["running", "trailrunning"]
+    scout_prompts = [p for p in llm.prompts if "Hunt inside this territory" in p]
+    core_hits = sum(("Long runs" in p or "First year of running" in p) for p in scout_prompts)
+    adjacent_hits = sum("On your feet all day" in p for p in scout_prompts)
+    assert core_hits > adjacent_hits >= 1  # roughly 70/30
+    hot = next(s for s in run.spaces if s.working_name == "Hot space")
+    assert hot.brand_fit == 8 and hot.territory == "Long runs" and hot.right_to_play
+
+
+def test_spread_keeps_both_ends():
+    from culture_crash.pipeline import spread
+
+    assert spread(list(range(10)), 4) == [0, 3, 6, 9]
+    assert spread([1, 2], 5) == [1, 2]
+    assert spread([5, 6, 7], 1) == [5]

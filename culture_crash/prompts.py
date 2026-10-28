@@ -51,12 +51,25 @@ chore, rising annoyance with something that is supposed to be good for you.""",
 }
 
 
-def scan_prompt(kind: str, cfg: RunConfig) -> str:
-    focus = (
-        f"Focus territory: {cfg.focus}. Stay near it, but follow a strong signal one step outside."
-        if cfg.focus
-        else "No focus territory: range across everyday life (home, work, money, bodies, love, friendship, food, time, technology, care)."
-    )
+def hunt_focus(cfg: RunConfig, territory: str | None = None) -> str:
+    """Where to hunt: the brand territory assigned to this scout, crossed with the user's focus."""
+    parts = []
+    if territory:
+        parts.append(
+            f"Hunt inside this territory: {territory}. Look at the lives of the people in it, not at "
+            "opinions about products: what they do, feel, hide and work around."
+        )
+    if cfg.focus:
+        parts.append(f"The strategist's focus is: {cfg.focus}." + (" Look where the two overlap." if territory else
+                     " Stay near it, but follow a strong signal one step outside."))
+    if not parts:
+        parts.append("No focus territory: range across everyday life (home, work, money, bodies, love, "
+                     "friendship, food, time, technology, care).")
+    return " ".join(parts)
+
+
+def scan_prompt(kind: str, cfg: RunConfig, territory: str | None = None) -> str:
+    focus = hunt_focus(cfg, territory)
     return f"""{SIGNAL_BRIEFS[kind]}
 
 {focus}
@@ -93,8 +106,8 @@ things adults are embarrassed not to know, and "day in my life" videos that show
 }
 
 
-def posts_prompt(platform: str, posts_block: str, cfg: RunConfig) -> str:
-    focus = f" Pay special attention to anything touching: {cfg.focus}." if cfg.focus else ""
+def posts_prompt(platform: str, posts_block: str, cfg: RunConfig, territory: str | None = None) -> str:
+    focus = " " + hunt_focus(cfg, territory) if (cfg.focus or territory) else ""
     return f"""Below are recent {platform} posts and comments gathered for pre-trend signals. Each has a source number.{focus}
 
 {PLATFORM_BRIEFS.get(platform, "")}
@@ -111,8 +124,8 @@ Skip memes with no feeling underneath, news reposts, ads and sponsored posts, an
 {posts_block}"""
 
 
-def platform_search_prompt(platform: str, cfg: RunConfig) -> str:
-    focus = f"Focus territory: {cfg.focus}." if cfg.focus else "No focus territory: range across everyday life."
+def platform_search_prompt(platform: str, cfg: RunConfig, territory: str | None = None) -> str:
+    focus = hunt_focus(cfg, territory)
     return f"""{PLATFORM_BRIEFS[platform]}
 
 Search only this platform (results are restricted to its domain). Hunt for all five tells: \
@@ -148,29 +161,84 @@ SOURCES
 
 # ------------------------------------------------------------------------ cluster
 
+PLAIN = """
+
+How to write (this matters as much as the content):
+- Write for a brand strategist reading fast. Plain, vivid, everyday English. Short sentences.
+- No jargon. No academic, technical or scientific terms. No arrows, equals signs or formulas.
+- Never mention source codes like S1 or signal ids in prose.
+- If you borrow an idea from a specialist field, say what it is in one sentence a twelve-year-old \
+would understand, then talk about people, not the field.
+- Concrete beats abstract: people, places, moments, objects, things they say."""
+
+
+# ------------------------------------------------------------------------- brand
+
+BRAND_RESEARCH_SYSTEM = """You map where a brand has a credible right to speak in culture.
+
+Search for what the brand actually stands for and does: its products and what they are known for, \
+who really buys and loves it, its origin story, its communities and events, its recent campaigns \
+and what it already says. Write short notes with citations."""
+
+
+def brand_research_prompt(brand: str) -> str:
+    return f"""Brand: {brand}. Research it, then write notes on where it has a real right to play in people's lives."""
+
+
+BRAND_SYSTEM = """Turn brand research into territories to hunt in.
+
+- core: 3 to 4 territories at the heart of the brand (where it has the strongest right to speak). \
+Each is a slice of people's lives, not a product category: for a running brand, things like \
+"the first year of running", "long runs and the hours they eat", "running when your body is \
+getting older", rather than "running shoes".
+- adjacent: 3 to 4 territories one step out, where the brand is credible but not expected.
+- For each: name (a few words), why (one sentence on the brand's right to be there), and \
+search_terms (2 to 4 short phrases real people would use when talking about this part of life).
+- summary: two sentences on what the brand is and who it is for.
+- already_says: 2 to 4 things the brand already says in its marketing, so ideas can avoid repeating them.
+- subreddits: 4 to 8 real, active subreddit names (without "r/") where people in these \
+territories talk about their lives. Only ones you are sure exist.""" + PLAIN
+
+
+def brand_prompt(brand: str, notes: str) -> str:
+    return f"""BRAND: {brand}
+
+RESEARCH NOTES
+{notes}"""
+
+
+# ----------------------------------------------------------------------- cluster
+
 CLUSTER_SYSTEM = """You find the unmet human needs underneath scattered evidence.
 
-A candidate space is not a topic ("sleep", "dating"). It is a felt contradiction: two things a \
-person wants at once that everyday life won't let them have together, which no one has given \
-them words for yet.
+A space is not a topic ("sleep", "running"). It is a felt contradiction: two things a person \
+wants at once that everyday life won't let them have together, which no one has given them \
+words for yet.
 
 Rules:
-- unnamed_need: one sentence in plain human language, the way a friend would put it. Avoid \
-marketing words and avoid clinical words.
-- pull_a / pull_b: the two forces in tension, stated concretely.
+- Return between 5 and the maximum number of spaces asked for. A run with one or two spaces is a \
+failure: split broad themes into their distinct tensions.
+- unnamed_need: one sentence in the person's own voice, the way they would say it to a friend.
+- pull_a / pull_b: the two forces in tension, each in one plain sentence.
+- why_unnamed: one or two plain sentences.
 - signal_ids: the evidence that holds the space up. Prefer spaces held up by several signal \
-kinds (a coinage and a shame and a workaround together is the strongest pattern), and by \
-signals from several platforms (the same feeling surfacing on TikTok, Reddit and YouTube \
-independently). A space with one signal is weak, so say so in why_unnamed.
-- working_name: a provisional, descriptive label for internal use, not a slogan.
-- nearest_named: real, existing trend names or concepts this could be confused with. These \
-will be checked against the web, so be honest about overlaps.
-- Do not force every signal into a space. Leftovers are fine."""
+kinds and several platforms. Use at least two signals per space.
+- working_name: a short, plain, memorable label (3 to 6 words). Not a slogan, no jargon.
+- nearest_named: real, existing trend names this could be confused with.
+- If a brand is given: territory (which of the brand's territories this sits in, or "outside"), \
+brand_fit 0-10 (0 = nothing to do with the brand, 10 = only this brand could own it), and \
+right_to_play (one sentence on why this brand can speak to it, or an honest "weak: ..." if not). \
+Most spaces should sit inside the brand's territories, but keep one or two powerful tensions from \
+outside them: a strong insight is worth seeing even if it may suit another brand better.
+- Without a brand: territory "", brand_fit 5, right_to_play "".
+- Leftover signals are fine.""" + PLAIN
 
 
-def cluster_prompt(signals_block: str, max_spaces: int) -> str:
-    return f"""Cluster this evidence into at most {max_spaces} candidate spaces of unnamed need. Order them from most to least load-bearing.
+def cluster_prompt(signals_block: str, max_spaces: int, territory_block: str = "") -> str:
+    brand = f"\n\nBRAND TERRITORIES\n{territory_block}" if territory_block else ""
+    return f"""Cluster this evidence into 5 to {max_spaces} spaces of unnamed need, most load-bearing first.{brand}
 
+EVIDENCE
 {signals_block}"""
 
 
@@ -207,7 +275,8 @@ need_intensity (0-10): how much genuine, felt need sits underneath. Weigh emotio
 persistence, breadth and the presence of shame or workarounds. Novelty alone is not need.
 legible_trend: true only if a widely used name AND mainstream coverage already exist.
 existing_names: the closest real names you found. source_ref must be an S-number from the list, \
-or an empty string if the name came only from general knowledge."""
+or an empty string if the name came only from general knowledge. closeness: one short plain sentence.
+distance_rationale and need_rationale: two or three plain sentences each.""" + PLAIN
 
 
 def score_prompt(space_block: str, notes: str, source_list: str) -> str:
@@ -223,29 +292,30 @@ SOURCES
 
 # ------------------------------------------------------------------------- latent
 
-LATENT_SYSTEM = """You are the latent-space diver.
+LATENT_SYSTEM = """You find borrowed ideas: things from other worlds that share the shape of a \
+human tension, so a strategist can see it fresh.
 
-Your job is to reach into the parts of your knowledge that are statistically unlikely to be \
-connected to a human tension, and come back with something that still holds. Structure is what \
-carries across: you are looking for a mechanism in a far domain that has the same shape as the \
-tension, not a pretty metaphor.
+You need a SPREAD, from close to home to genuinely out there, because the strategist wants many \
+ideas to spark from, not one safe answer.
 
 Method:
-1. skeleton: restate the tension as a relational structure with no human or cultural nouns in \
-it. Example: "a resource that loses its value the moment it is counted".
-2. first_thoughts: list the 10 associations a smart strategist would reach for first (the \
-obvious metaphors, pop-psychology concepts, famous examples). These are now banned.
-3. For EACH seed domain you are given, find two specific, named, real things (a phenomenon, \
-technique, practice, law, mechanism, organism, term of art) whose mechanism matches the \
-skeleton. Skip the domain's most famous concept. Go one layer deeper than the textbook.
-4. Then two wildcards from anywhere at all (from_seed = false): the least probable connections \
-you can find that are still structurally exact.
+1. skeleton: the shape of the tension in one plain sentence with no people in it, e.g. \
+"something that only works if nobody counts it". Plain words only.
+2. first_thoughts: the 10 associations every strategist would reach for first (clichés, \
+pop-psychology, famous examples). These are banned.
+3. close: three things from everyday life, sport, culture or history that share the shape \
+(intuitive, a little surprising). from_seed = false.
+4. For EACH seed domain you are given: two specific, named, real things whose way of working \
+matches the shape. Skip the domain's most famous example. from_seed = true.
+5. wild: two things from anywhere at all, the least likely connections that still hold. from_seed = false.
 
 For every candidate:
-- mechanism: how it actually works, accurately, in two sentences.
-- structural_rhyme: the exact mapping, element by element, onto the tension.
-- obviousness (0-10): how likely a well-read strategist would be to reach for it. Be honest.
-Only include things you are confident are real and can be verified. Never invent a term."""
+- name: its real name.
+- mechanism: what it is and how it works, in two plain sentences anyone would follow.
+- structural_rhyme: in one plain sentence, why it has the same shape as the tension.
+- obviousness (0-10): how likely a well-read strategist would be to reach for it. Close ones \
+3-6, seed and wild ones lower. Be honest.
+Only include things you are confident are real and can be verified. Never invent a term.""" + PLAIN
 
 
 def latent_prompt(space_block: str, seeds: list[str]) -> str:
@@ -257,11 +327,11 @@ SEED DOMAINS (drawn at random. Make each one work.)
 {seed_lines}"""
 
 
-VERIFY_SYSTEM = """You fact-check unusual concepts before anyone builds on them.
+VERIFY_SYSTEM = """You fact-check borrowed ideas before anyone builds on them.
 
-For each concept, search for an authoritative source (encyclopedic, academic, institutional, \
-museum, specialist society) that confirms it is real and that the stated mechanism is accurate. \
-Correct the mechanism if it is wrong or overstated. If you cannot confirm it, say so plainly."""
+For each concept, search for a reliable source (encyclopedic, academic, institutional, museum, \
+specialist society, reputable press) confirming it is real and that the description is accurate. \
+Correct the description if it is wrong or overstated. If you cannot confirm it, say so plainly."""
 
 
 def verify_prompt(candidates_block: str) -> str:
@@ -271,82 +341,82 @@ def verify_prompt(candidates_block: str) -> str:
 
 
 VERIFY_STRUCT_SYSTEM = """Turn verification notes into a verdict per concept.
-verified = true only if the notes cite a source confirming the concept exists and the mechanism \
+verified = true only if the notes cite a source confirming the concept exists and the description \
 is substantially right. source_ref must be an S-number from the source list (for example "S2"), \
-or an empty string when unverified. corrected_mechanism: the accurate two-sentence mechanism."""
+or an empty string when unverified. corrected_mechanism: the accurate description in two plain \
+sentences anyone would follow.""" + PLAIN
 
 
 # ------------------------------------------------------------------------ collide
 
-COLLIDE_SYSTEM = """You make collisions.
+COLLIDE_SYSTEM = """You generate ideas for a brand strategist by colliding a real human tension \
+with borrowed ideas from other worlds.
 
-You take a real, evidenced human tension and a verified concept from a far domain, and force \
-them together until they produce a thought nobody would have had from either side alone. The \
-output is a card in the spirit of Brian Eno and Peter Schmidt's Oblique Strategies: a \
-provocation that unlocks a team's thinking, not an answer.
+The strategist wants MANY ideas across a range, from close and usable to properly out there. \
+An idea that only sparks a thought is still worth having. Do not play safe and do not filter.
 
-For each card:
-- oblique_strategy: 15 words at most. An imperative or a koan, written from the far concept's \
-logic. It should make a strategist stop, frown, then see something. No brand names, no jargon, \
-no hashtags.
-- mad_thought: two to four sentences. The improbable proposition the collision makes thinkable, \
-stated boldly and concretely.
-- bridge: the exact structural mapping (this in the concept corresponds to that in the tension). \
-This is what keeps the mad thought honest.
-- coinage: one to three candidate words or short phrases that could give people language for \
-the feeling they already have. Not taglines. They should sound like something a person might \
-say to a friend.
-- coinage_gloss: one sentence defining the best coinage.
-- value_exchange: the shape of an honest exchange. What a brand could give people (permission, \
-a tool, a ritual, a space, a name, a practical fix) in return for their attention, money or \
-trust. Keep it specific.
-- risk_note: how this exact idea could tip into manufacturing insecurity or exploiting the \
-feeling.
-- surprise (0-10): how far this is from what the category would normally say.
-- coherence (0-10): how surely a real person living this tension would recognise themselves in it.
-- signal_ids: the evidence this card rests on.
-- dig_deeper: three to five follow-up leads for a strategist who wants to go further: exact \
-search queries to run, communities or subreddits to read, the far concept's key texts or \
-authorities, and one open question this card raises but cannot answer.
-Make one card per concept. Both scores matter: a wild card that doesn't land scores low on coherence."""
+The bar: the kind of move that wins at Cannes Lions. A simple human truth turned into one bold \
+act, reframe or gesture that people talk about. Think of how Dove Real Beauty Sketches, Always \
+#LikeAGirl, Fearless Girl or Volvo's Epic Split each made one sharp move. Aim for that clarity \
+and nerve, never for a slogan.
+
+Make one idea per borrowed concept, plus two "direct" ideas that come straight from the evidence \
+with no borrowed concept (concept_name ""). For each idea:
+- title: 3 to 6 words, plain and punchy, so the strategist can scan a wall of them.
+- provocation: an Oblique Strategy-style line of at most 12 words. Imperative or koan, written \
+in plain words. It should make someone stop, frown, then see something.
+- thought: two or three plain sentences. The idea itself, stated boldly and concretely.
+- concept_name: the borrowed concept's name exactly as given, or "" for a direct idea.
+- borrowed_from: one sentence explaining the borrowed concept as you would to a friend in a pub \
+("Potters wrap half-dry clay in plastic so pieces can still be joined later."). "" for direct ideas.
+- why_it_fits: one or two plain sentences on why the borrowed shape fits the human tension.
+- words_for_it: one to three words or short phrases that could give people language for what \
+they feel. Things a person might say to a friend, not taglines.
+- words_gloss: one sentence defining the best of them.
+- for_brand: what the brand could actually do. One concrete act, product, ritual, format, event \
+or piece of permission, in two sentences. Specific to this brand, not any brand.
+- risk: one sentence on how this could tip into exploiting the feeling.
+- weirdness (0-10): 0-3 a move the category could make tomorrow; 4-6 surprising but recognisable; \
+7-10 genuinely out there, may only spark a thought. Spread your ideas across the whole range.
+- brand_fit (0-10): 0-3 any brand, or not this one; 4-6 plausible for this brand; 7-10 only this \
+brand could own it.
+- cannes_echo: if the move resembles a campaign you are certain won a Cannes Lion, name it and \
+the shared move in one short line. Otherwise "". Never guess.
+- signal_ids: the evidence it rests on.
+- dig_deeper: three or four follow-up leads: search phrases to run, communities to read, and one \
+open question the idea raises. Plain phrases, no prefixes like "Search:".""" + PLAIN
 
 
-def collide_prompt(space_block: str, signals_block: str, latent_block: str, brand: str | None) -> str:
-    lens = (
-        f"BRAND LENS: {brand}. Shape value_exchange around what this brand could credibly and honestly offer. Do not bend the oblique strategy or the mad thought toward the brand."
-        if brand
-        else "No brand lens. Describe value_exchange for the category of brand that could credibly offer it."
-    )
+def collide_prompt(space_block: str, signals_block: str, latent_block: str, brand_block: str) -> str:
     return f"""TENSION
 {space_block}
 
 EVIDENCE
 {signals_block}
 
-VERIFIED FAR CONCEPTS
+BORROWED CONCEPTS (verified)
 {latent_block}
 
-{lens}"""
+{brand_block}"""
 
 
 # ---------------------------------------------------------------------- conscience
 
-CONSCIENCE_SYSTEM = """You prepare the conscience brief for a human operator. You do not decide.
+CONSCIENCE_SYSTEM = """You prepare the conscience brief for a strategist. You do not decide.
 
 The engine that found this space can't tell the difference between meeting an unnamed need and \
-manufacturing insecurity to sell against. Your job is to lay out both readings as sharply as \
-possible so a person can answer one question: does naming this give people something, or take \
-something from them?
+manufacturing insecurity to sell against. Lay out both readings sharply so a person can answer \
+one question: does naming this give people something, or take something from them?
 
+Keep it tight: each field one to three plain sentences, lists of at most three items.
 - gives: what people concretely gain if this is named well.
-- takes: what naming it could take from them (privacy, a private refuge, self-acceptance, \
-money, a habit that was working fine, a feeling that was theirs).
+- takes: what naming it could take from them.
 - who_is_vulnerable: who is most exposed if this is handled badly.
-- exploitation_vectors: specific ways a brand could turn this into insecurity, shame or \
-dependency.
+- exploitation_vectors: up to three specific ways a brand could turn this into insecurity, shame \
+or dependency.
 - honest_version: what it looks like when a brand gets this right.
-- questions_for_operator: three hard questions the operator should answer before going further.
-Be direct. Do not soften the risks and do not give a verdict."""
+- questions_for_operator: three hard questions.
+Be direct. Do not soften the risks and do not give a verdict.""" + PLAIN
 
 
 def conscience_prompt(space_block: str, cards_block: str, brand: str | None) -> str:
@@ -356,5 +426,5 @@ def conscience_prompt(space_block: str, cards_block: str, brand: str | None) -> 
 SPACE
 {space_block}
 
-PROPOSED COLLISIONS
+PROPOSED IDEAS
 {cards_block}"""

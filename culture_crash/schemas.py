@@ -31,6 +31,9 @@ class ClusterSpace(BaseModel):
     why_unnamed: str
     nearest_named: list[str]
     signal_ids: list[str]
+    territory: str
+    brand_fit: float
+    right_to_play: str
 
 
 class ClusterResult(BaseModel):
@@ -80,22 +83,39 @@ class LatentVerification(BaseModel):
 
 
 class CollisionCard(BaseModel):
-    latent_name: str
-    oblique_strategy: str
-    mad_thought: str
-    bridge: str
-    coinage: list[str]
-    coinage_gloss: str
-    value_exchange: str
-    risk_note: str
-    surprise: float
-    coherence: float
+    title: str
+    provocation: str
+    thought: str
+    concept_name: str
+    borrowed_from: str
+    why_it_fits: str
+    words_for_it: list[str]
+    words_gloss: str
+    for_brand: str
+    risk: str
+    weirdness: float
+    brand_fit: float
+    cannes_echo: str
     signal_ids: list[str]
     dig_deeper: list[str]
 
 
 class CollisionSet(BaseModel):
     cards: list[CollisionCard]
+
+
+class TerritoryOut(BaseModel):
+    name: str
+    why: str
+    search_terms: list[str]
+
+
+class BrandTerritoryOut(BaseModel):
+    summary: str
+    core: list[TerritoryOut]
+    adjacent: list[TerritoryOut]
+    already_says: list[str]
+    subreddits: list[str]
 
 
 ConscienceOut = ConscienceBrief
